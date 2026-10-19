@@ -60,6 +60,7 @@ h3{font-size:.76rem;text-transform:uppercase;letter-spacing:.09em;color:var(--mu
 .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 .spacer{flex:1}
 .stack{display:grid;gap:12px;min-width:0}
+.stack>*{min-width:0}
 .btn{border:1px solid var(--line);background:var(--panel);padding:6px 12px;border-radius:8px;font-weight:500}
 .btn:hover{border-color:var(--accent)}
 .btn:disabled{opacity:.45;cursor:default}
@@ -168,6 +169,18 @@ tr.done .ilink{text-decoration:line-through}
 .ghead .arr{display:inline-block;width:1em;color:var(--accent);font-size:.95rem}
 .ghead .cnt{font-family:var(--f-mono);font-weight:400;letter-spacing:0}
 .groups{display:grid;gap:16px}
+.badge{display:inline-block;min-width:1.4em;padding:0 5px;border-radius:9px;background:var(--accent);color:var(--accent-ink);font-size:.72rem;font-family:var(--f-mono);text-align:center;margin-left:5px}
+table.cmp{border-collapse:separate;border-spacing:0;min-width:100%;font-size:.92rem}
+table.cmp th,table.cmp td{padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top;text-align:left}
+table.cmp thead th{position:sticky;top:0;background:var(--panel);min-width:190px;max-width:260px}
+table.cmp tbody th{font-size:.72rem;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:700;white-space:nowrap;position:sticky;left:0;background:var(--panel);z-index:1}
+table.cmp td.num{font-family:var(--f-mono)}
+table.cmp td.best{background:var(--ok-soft);color:var(--ok);font-weight:700}
+table.cmp tr.sec th{padding-top:16px;color:var(--ink);font-size:.78rem}
+.cmphead{display:grid;gap:4px}
+.cmphead button.nm{border:0;background:none;padding:0;font-weight:700;font-size:1rem;text-align:left}
+.cmphead button.nm:hover{color:var(--accent)}
+.btn.on{background:var(--ok-soft);border-color:var(--ok);color:var(--ok)}
 .searchbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
 .searchbar input{flex:1 1 260px;min-width:0;font-size:1.05rem;padding:10px 14px}
 /* drawer */
@@ -236,6 +249,7 @@ main{padding-bottom:36px}
     <button type="button" data-act="tab" data-tab="sets">Sets</button>
     <button type="button" data-act="tab" data-tab="bags">Item Bag</button>
     <button type="button" data-act="tab" data-tab="search">Search</button>
+    <button type="button" data-act="tab" data-tab="compare">Compare<span id="cmp-badge"></span></button>
   </nav>
 </div></header>
 <main class="wrap" id="main"></main>
@@ -275,7 +289,7 @@ const KEY='mhdos-item-counter-v3';
 const BAG_SIZE=20;
 const blankSet=(id,name)=>({id,name,slots:{Weapon:null,Headgear:null,Torso:null,Arms:null,Waist:null,Legs:null},decos:[],open:{}});
 const blankBag=(id,name)=>({id,name,slots:Array(BAG_SIZE).fill(null)});
-let S={tab:'sets',sets:[blankSet(1,'Set 1')],cur:1,bags:[blankBag(1,'Bag 1')],curBag:1,have:{},onlyMissing:false,search:{type:'all',wc:'all',ac:'all',q:''},target:null,newSet:false,newBag:false};
+let S={tab:'sets',sets:[blankSet(1,'Set 1')],cur:1,bags:[blankBag(1,'Bag 1')],curBag:1,have:{},onlyMissing:false,search:{type:'all',wc:'all',ac:'all',q:''},compare:{w:[],a:[]},cmpKind:'w',cmpLv:'max',target:null,newSet:false,newBag:false};
 let OLD=null;
 try{const raw=localStorage.getItem(KEY);if(raw)S=Object.assign(S,JSON.parse(raw));else{const o=localStorage.getItem('mhdos-item-counter-v2');if(o)OLD=JSON.parse(o);}}catch(e){}
 if(!S.sets.length)S.sets=[blankSet(1,'Set 1')];
@@ -283,7 +297,7 @@ if(!S.bags||!S.bags.length)S.bags=[blankBag(1,'Bag 1')];
 S.sets.forEach(s=>{if(!s.decos)s.decos=[];if(!s.open)s.open={};});
 if(!S.sets.find(s=>s.id===S.cur))S.cur=S.sets[0].id;
 if(!S.bags.find(b=>b.id===S.curBag))S.curBag=S.bags[0].id;
-S.newSet=false;S.newBag=false;
+S.newSet=false;S.newBag=false;if(!S.compare)S.compare={w:[],a:[]};if(!S.cmpKind)S.cmpKind='w';if(!S.cmpLv)S.cmpLv='max';
 function save(){try{const c=Object.assign({},S,{newSet:false,newBag:false});localStorage.setItem(KEY,JSON.stringify(c));}catch(e){}}
 const curSet=()=>S.sets.find(s=>s.id===S.cur)||S.sets[0];
 const curBag=()=>S.bags.find(b=>b.id===S.curBag)||S.bags[0];
@@ -541,6 +555,54 @@ function slotCard(set,sl){
     ${armorControls('set',sl,g)}
     <button type="button" class="ext-toggle" data-act="slot-open" data-slot="${sl}" aria-expanded="${open}">${open?'▾ Hide levels':'▸ Show levels and materials'} (max Lv${maxLv(a)})</button>${open?levelTable('set',sl,g):''}</div>`;
 }
+/* numbers behind the set stats, reused by "Try in set" */
+function computeStats(set){
+  const W=set.slots.Weapon,w=W?weapons[wEnd(W.i,W.end)]:null,ws=w?w.s||{}:{};
+  let def=0,res=[0,0,0,0,0],slotsArmor=0;
+  CATS.forEach(c=>{const g=set.slots[c];if(!g)return;const a=armor[g.i];const k=Math.max(0,Math.min(Math.max(g.to||1,g.cur||0),maxLv(a))-1);
+    def+=a.def?a.def[k]:0;slotsArmor+=a.sl?a.sl[k]:0;(a.res||[]).forEach((v,x)=>res[x]+=v);});
+  const tot=setSkillTotals(set);const act={};
+  Object.entries(tot).forEach(([n,p])=>{const a=activeFor(n,p);if(a)act[n]=a;});
+  let rawBonus=0,defBonus=0;
+  Object.entries(act).forEach(([n,a])=>{const m=/\(\+(\d+)\)/.exec(a[2]||'');if(n==='Attack'&&m)rawBonus=+m[1];if(n==='Defense'){const dm=/([+-])\s*(\d+)/.exec(a[1]);if(dm)defBonus=(dm[1]==='-'?-1:1)*+dm[2];}});
+  const lay=decoLayout(set);
+  return {w,atk:ws.atk||0,raw:(ws.dmg||0)+rawBonus,el:ws.el||'',ev:ws.ev||0,aff:ws.aff||0,def:def+(ws.def||0)+defBonus,res,
+    slotsUsed:lay.fit.reduce((n,x)=>n+decos[x.i].sl,0),slotsTotal:slotsArmor+(ws.sl||0),tot,act};
+}
+function trySet(v,set){
+  const alt=JSON.parse(JSON.stringify(set));let slot,dropped=0;
+  if(v.t==='w'){slot='Weapon';alt.slots.Weapon={i:v.i,mode:v.mode,end:v.end!=null?+v.end:undefined};}
+  else{slot=armor[v.i].c;alt.slots[slot]={i:v.i,cur:0,to:v.lv||1,path:false};}
+  const old=set.slots[slot];
+  if(!old||old.i!==v.i){dropped=alt.decos.filter(x=>x.p===slot).length;alt.decos=alt.decos.filter(x=>x.p!==slot);}
+  const A=computeStats(set),B=computeStats(alt);
+  const dRow=(label,a,b,fmtv)=>{const d=b-a;const f=fmtv||(x=>x);return `<tr><th scope="row">${label}</th><td class="n">${f(a)}</td><td class="n">${f(b)}</td><td class="n" style="color:${d>0?'var(--ok)':d<0?'var(--warn)':'var(--muted)'};font-weight:${d?700:400}">${d?sgn(d):'='}</td></tr>`;};
+  const elA=A.el?A.el+' '+A.ev:'—',elB=B.el?B.el+' '+B.ev:'—';
+  const gained=Object.keys(B.act).filter(n=>!A.act[n]||A.act[n][1]!==B.act[n][1]);
+  const lost=Object.keys(A.act).filter(n=>!B.act[n]||B.act[n][1]!==A.act[n][1]);
+  const trees=[...new Set([...Object.keys(A.tot),...Object.keys(B.tot)])].filter(n=>(A.tot[n]||0)!==(B.tot[n]||0)).sort();
+  const oldName=old?(slot==='Weapon'?weapons[wEnd(old.i,old.end)].n:armor[old.i].n+' Lv'+Math.max(old.to||1,old.cur||0)):'empty slot';
+  const newName=slot==='Weapon'?weapons[wEnd(v.i,v.end)].n:armor[v.i].n+' Lv'+(v.lv||1);
+  return `<div class="box total"><div class="row"><h3>${esc(set.name)}: ${esc(oldName)} → ${esc(newName)}</h3></div>
+    <div class="tablewrap"><table class="grid"><thead><tr><th></th><th class="n">Now</th><th class="n">With swap</th><th class="n">Change</th></tr></thead><tbody>
+    ${slot==='Weapon'?dRow('Attack',A.atk,B.atk)+dRow('True raw',A.raw,B.raw)+`<tr><th scope="row">Element</th><td class="n">${esc(elA)}</td><td class="n">${esc(elB)}</td><td class="n">${elA===elB?'=':'≠'}</td></tr>`+dRow('Affinity',A.aff,B.aff,x=>x+'%'):''}
+    ${dRow('Defense',A.def,B.def)}
+    ${ELEMS.map((e,x)=>dRow(`<span class="el-${e.toLowerCase()}">${e} res</span>`,A.res[x],B.res[x],sgn)).join('')}
+    ${dRow('Decoration slots',A.slotsTotal,B.slotsTotal)}
+    </tbody></table></div>
+    <div class="src"><h3>Active skills</h3>${gained.length||lost.length?`<div class="actives">${gained.map(n=>`<span class="pill">+ ${esc(B.act[n][1])}</span>`).join('')}${lost.map(n=>`<span class="pill neg">− ${esc(A.act[n][1])}</span>`).join('')}</div>`:'<span class="small muted">No change in active skills.</span>'}</div>
+    ${trees.length?`<div class="tablewrap"><table class="grid"><thead><tr><th>Skill tree</th><th class="n">Now</th><th class="n">With swap</th><th class="n">Change</th></tr></thead><tbody>${trees.map(n=>dRow(esc(n),A.tot[n]||0,B.tot[n]||0,sgn)).join('')}</tbody></table></div>`:''}
+    ${dropped?`<div class="small muted">${dropped} decoration${dropped>1?'s':''} in the current ${SLOT_LABEL[slot].toLowerCase()} would come off, so ${dropped>1?'they are':'it is'} not counted here.</div>`:''}
+    <div class="row"><button type="button" class="btn primary sm" data-act="try-apply" data-id="${set.id}">Swap it into ${esc(set.name)}</button></div></div>`;
+}
+function tryButton(v){
+  return `<button type="button" class="btn sm" data-act="try-toggle" aria-expanded="${!!v.tryOpen}">${v.tryOpen?'▾':'⇆'} Try in set</button>`;
+}
+function tryPanel(v){
+  if(!v.tryOpen)return '';
+  const set=S.sets.find(x=>x.id===v.trySet);
+  return `<div class="stack"><div class="row"><span class="small muted">Swap into</span>${S.sets.map(x=>`<button type="button" class="btn sm${v.trySet===x.id?' on':''}" data-act="try-set" data-id="${x.id}">${esc(x.name)}</button>`).join('')}</div>${set?trySet(v,set):'<span class="small muted">Pick a set to see what changes.</span>'}</div>`;
+}
 function setStats(set){
   const W=set.slots.Weapon,w=W?weapons[wEnd(W.i,W.end)]:null, ws=w?w.s||{}:{};
   let def=0,res=[0,0,0,0,0],slotsArmor=0;const classes=new Set();
@@ -602,6 +664,72 @@ function renderSets(){
 }
 
 /* ---------- item bag page ---------- */
+/* ---------- compare page ---------- */
+const MAX_CMP=4;
+function cmpButton(k,i){
+  if(k!=='w'&&k!=='a')return '';
+  const on=S.compare[k].includes(i),full=!on&&S.compare[k].length>=MAX_CMP;
+  return `<button type="button" class="btn sm${on?' on':''}" data-act="cmp-toggle" data-k="${k}" data-i="${i}"${full?' disabled title="You can compare up to '+MAX_CMP+' at a time"':''}>${on?'✓ In compare':'⇄ Compare'}</button>`;
+}
+function bestCells(vals,mode){ // vals: numbers or null; returns set of indexes holding the best value
+  const nums=vals.map(v=>typeof v==='number'?v:null);const real=nums.filter(v=>v!=null);
+  if(real.length<2)return new Set();
+  const b=mode==='min'?Math.min(...real):Math.max(...real);
+  if(real.every(v=>v===b)||(mode==='pos'&&b<=0))return new Set();
+  return new Set(nums.map((v,k)=>v===b?k:-1).filter(k=>k>=0));
+}
+function cmpRow(label,cells,vals,mode){
+  const best=vals?bestCells(vals,mode):new Set();
+  return `<tr><th scope="row">${label}</th>${cells.map((c,k)=>`<td class="${vals?'num':''}${best.has(k)?' best':''}">${c}</td>`).join('')}</tr>`;
+}
+function renderCompare(){
+  const k=S.cmpKind,list=S.compare[k];
+  const kinds=[['w','Weapons'],['a','Armor']];
+  const head=`<div class="row"><h2>Compare</h2><div class="seg text" role="group" aria-label="Equipment type">${kinds.map(([v,l])=>`<button type="button" data-act="cmp-kind" data-v="${v}" aria-pressed="${k===v}">${l} (${S.compare[v].length})</button>`).join('')}</div><span class="spacer"></span>${list.length?`<button type="button" class="btn ghost sm" data-act="cmp-clear">Clear ${k==='w'?'weapons':'armor'}</button>`:''}</div>`;
+  if(!list.length) return `<section class="stack">${head}<div class="panel pad"><p style="margin:0 0 6px"><b>Nothing to compare yet.</b></p><p class="muted" style="margin:0">Open any ${k==='w'?'weapon':'armor piece'} in <b>Search</b> or from a set and press <b>⇄ Compare</b>. You can line up to ${MAX_CMP} side by side; the best value in each row is highlighted.</p></div><div class="row"><button type="button" class="btn primary" data-act="cmp-browse">Browse ${k==='w'?'weapons':'armor'}</button></div></section>`;
+  const cols=list.map(i=>`<th scope="col"><div class="cmphead">${dot(SRC[k][i].r)}<button type="button" class="nm" data-act="open-${k}" data-i="${i}">${esc(SRC[k][i].n)}</button><span class="kind">${esc(kindLine(k,i))}</span><button type="button" class="btn ghost sm" data-act="cmp-remove" data-k="${k}" data-i="${i}" style="justify-self:start">Remove</button></div></th>`).join('');
+  const rows=[];
+  if(k==='w'){
+    const W=list.map(i=>weapons[i]),s=W.map(w=>w.s||{});
+    rows.push(cmpRow('Attack',s.map(x=>x.atk??'—'),s.map(x=>x.atk)));
+    rows.push(cmpRow('True raw',s.map(x=>x.dmg??'—'),s.map(x=>x.dmg)));
+    rows.push(cmpRow('Element',s.map(x=>x.el?`<span class="el-${String(x.el).toLowerCase()}">${esc(x.el)} ${x.ev||''}</span>`:'—'),s.map(x=>x.ev||null)));
+    rows.push(cmpRow('Affinity',s.map(x=>(x.aff?sgn(x.aff):0)+'%'),s.map(x=>x.aff||0)));
+    rows.push(cmpRow('Slots',s.map(x=>'◯'.repeat(x.sl||0)||'—'),s.map(x=>x.sl||0)));
+    rows.push(cmpRow('Defense',s.map(x=>x.def?'+'+x.def:'—'),s.map(x=>x.def||0)));
+    if(s.some(x=>x.sh)){rows.push(cmpRow('Sharpness',s.map(x=>x.sh?sharpBar(x.sh[0]):'—')));rows.push(cmpRow('With Handicraft',s.map(x=>x.sh?sharpBar(x.sh[1]):'—')));}
+    if(s.some(x=>x.shell))rows.push(cmpRow('Shelling',s.map(x=>esc(x.shell||'—'))));
+    if(s.some(x=>x.notes))rows.push(cmpRow('Notes',s.map(x=>x.notes?`<span class="notes">${x.notes.map(n=>`<i style="background:${NOTE[n]||n}"></i>`).join('')}</span>`:'—')));
+    if(s.some(x=>x.reload)){rows.push(cmpRow('Reload',s.map(x=>esc(x.reload||'—'))));rows.push(cmpRow('Recoil',s.map(x=>esc(x.recoil||'—'))));}
+    if(s.some(x=>x.charge))rows.push(cmpRow('Charge levels',s.map(x=>x.charge?x.charge.map((c,j)=>'Lv'+(j+1)+' '+esc(c)).join('<br>'):'—')));
+    rows.push(cmpRow('Price',W.map(w=>fmt(w.p)+'z'),W.map(w=>w.p),'min'));
+    const tot=list.map(i=>aggregate([{k:'w',i,mode:'path'}]));
+    rows.push(`<tr class="sec"><th scope="row" colspan="${list.length+1}">From scratch (full path)</th></tr>`);
+    rows.push(cmpRow('Upgrades',list.map(i=>weaponChain(i).length-1),list.map(i=>weaponChain(i).length-1),'min'));
+    rows.push(cmpRow('Total cost',tot.map(t=>fmt(t.z)+'z'),tot.map(t=>t.z),'min'));
+    rows.push(cmpRow('Materials',tot.map(t=>chips(t.rows.map(r=>[r.i,r.q])))));
+  }else{
+    const A=list.map(i=>armor[i]);
+    const lvOf=a=>S.cmpLv==='max'?maxLv(a):Math.min(+S.cmpLv,maxLv(a));
+    const L=A.map(lvOf);
+    rows.push(cmpRow('Compared at',L.map((l,j)=>'Lv'+l+(l===maxLv(A[j])?' (max)':''))));
+    rows.push(cmpRow('Defense',A.map((a,j)=>a.def?a.def[L[j]-1]:'—'),A.map((a,j)=>a.def?a.def[L[j]-1]:null)));
+    rows.push(cmpRow('Slots',A.map((a,j)=>a.sl?('◯'.repeat(a.sl[L[j]-1])||'—'):'—'),A.map((a,j)=>a.sl?a.sl[L[j]-1]:0)));
+    ELEMS.forEach((e,x)=>rows.push(cmpRow(`<span class="el-${e.toLowerCase()}">${e} res</span>`,A.map(a=>sgn((a.res||[])[x]||0)),A.map(a=>(a.res||[])[x]||0))));
+    const trees=[...new Set(A.flatMap(a=>(a.sk||[]).map(x=>x[0])))];
+    if(trees.length){rows.push(`<tr class="sec"><th scope="row" colspan="${list.length+1}">Skill points</th></tr>`);
+      trees.forEach(t=>{const v=A.map(a=>{const f=(a.sk||[]).find(x=>x[0]===t);return f?(f[1]==null?null:parseInt(f[1],10)):0;});
+        rows.push(cmpRow(esc(t),v.map((p,j)=>t==='Torso Up'?((A[j].sk||[]).some(x=>x[0]==='Torso Up')?'Yes':'—'):(p?(p<0?`<span class="skill-neg">${sgn(p)}</span>`:sgn(p)):'—')),t==='Torso Up'?null:v,'pos'));});}
+    const tot=list.map((i,j)=>aggregate([{k:'a',i,cur:0,to:L[j],path:false}]));
+    rows.push(`<tr class="sec"><th scope="row" colspan="${list.length+1}">Cost to forge up to that level</th></tr>`);
+    rows.push(cmpRow('Total cost',tot.map(t=>fmt(t.z)+'z'),tot.map(t=>t.z),'min'));
+    rows.push(cmpRow('Materials',tot.map(t=>chips(t.rows.map(r=>[r.i,r.q])))));
+  }
+  const lvCtl=k==='a'?`<div class="row"><span class="small muted">Compare armor at</span><div class="seg" role="group" aria-label="Armor level">${['1','2','3','4','5','6','7','max'].map(v=>`<button type="button" data-act="cmp-lv" data-v="${v}" aria-pressed="${S.cmpLv===v}">${v==='max'?'Max':'Lv'+v}</button>`).join('')}</div></div>`:'';
+  return `<section class="stack">${head}${lvCtl}<div class="panel" style="padding:4px 0"><div class="tablewrap"><table class="cmp"><thead><tr><th></th>${cols}</tr></thead><tbody>${rows.join('')}</tbody></table></div></div>
+    <p class="small muted" style="margin:0">Green marks the best value in a row (lowest for prices and upgrade counts).${list.length<MAX_CMP?` Add up to ${MAX_CMP-list.length} more with ⇄ Compare.`:''}</p></section>`;
+}
+
 function renderBags(){
   const bag=curBag();
   const tabs=S.bags.map(b=>`<button type="button" class="settab" data-act="bag-pick" data-id="${b.id}" aria-pressed="${b.id===bag.id}">${esc(b.name)}</button>`).join('');
@@ -633,6 +761,8 @@ function renderSearch(){
   let sub='';
   if(s.type==='w') sub=`<div class="subtabs" role="group" aria-label="Weapon type">${[['all','All weapons'],...WCLASSES.map(c=>[c,c])].map(([v,l])=>`<button type="button" data-act="wc" data-v="${v}" aria-pressed="${s.wc===v}">${l}</button>`).join('')}</div>`;
   if(s.type==='a') sub=`<div class="subtabs" role="group" aria-label="Armor part">${[['all','All armor'],...CATS.map(c=>[c,SLOT_LABEL[c]])].map(([v,l])=>`<button type="button" data-act="ac" data-v="${v}" aria-pressed="${s.ac===v}">${l}</button>`).join('')}</div>`;
+  if(s.type==='a'||s.type==='d'){const trees=Object.keys(skills).sort();
+    sub+=`<div class="row"><label class="small muted" for="skill-filter">Skill</label><select id="skill-filter" data-act="skill-filter"><option value="">Any skill</option>${trees.map(t=>`<option value="${esc(t)}"${s.skill===t?' selected':''}>${esc(t)}</option>`).join('')}</select>${s.skill?`<span class="small muted">Pieces with positive ${esc(s.skill)} points, highest first.</span><button type="button" class="btn ghost sm" data-act="skill-clear">Clear</button>`:''}</div>`;}
   const T=S.target;const tgt=T&&(T.kind==='bag'?S.bags.find(x=>x.id===T.bag):S.sets.find(x=>x.id===T.set));
   return `<section class="stack">
     ${tgt?`<div class="note row">Choosing <b>${esc(T.label)}</b> for <b>${esc(tgt.name)}</b>. Open an entry and use <b>◂ Add to ${T.kind==='bag'?'bag':'set'}</b>.<span class="spacer"></span><button type="button" class="btn ghost sm" data-act="target-clear">Dismiss</button></div>`:''}
@@ -642,6 +772,7 @@ function renderSearch(){
     <div id="results"></div></section>`;
 }
 let showLimit=150;
+function skPts(k,i,tree){const f=((k==='a'?armor:decos)[i].sk||[]).find(x=>x[0]===tree);return f&&f[1]!=null?parseInt(f[1],10):0;}
 function renderResults(){
   const box=$('#results');if(!box)return;
   const s=S.search,q=norm(s.q.trim());
@@ -652,7 +783,9 @@ function renderResults(){
     if(s.type!=='all'&&e.k!==s.type)return false;
     if(e.k==='w'&&s.type==='w'&&s.wc!=='all'&&weapons[e.i].c!==s.wc)return false;
     if(e.k==='a'&&s.type==='a'&&s.ac!=='all'&&armor[e.i].c!==s.ac)return false;
+    if(s.skill&&(s.type==='a'||s.type==='d')&&!(skPts(e.k,e.i,s.skill)>0))return false;
     return terms.every(t=>e.key.includes(t));});
+  if(s.skill&&(s.type==='a'||s.type==='d'))hits.sort((a,b)=>skPts(b.k,b.i,s.skill)-skPts(a.k,a.i,s.skill));
   if(s.type==='w'){
     if(!S.search.collapsed)S.search.collapsed={};
     const groups=new Map();
@@ -664,13 +797,15 @@ function renderResults(){
     return;
   }
   const shown=hits.slice(0,showLimit);
-  box.innerHTML=`<p class="small muted">${hits.length} result${hits.length===1?'':'s'}</p><div class="cards">`+shown.map(e=>`<button type="button" class="card" data-act="${openAct[e.k]}" data-i="${e.i}">${dot(refR([e.k,e.i]))}<span class="t"><b>${esc(refName([e.k,e.i]))}</b><span class="kind">${esc(kindLine(e.k,e.i))}</span></span></button>`).join('')+'</div>'+(hits.length>showLimit?`<div class="row" style="margin-top:12px"><button type="button" class="btn" data-act="more">Show ${Math.min(300,hits.length-showLimit)} more</button><span class="small muted">${hits.length-showLimit} not shown</span></div>`:'');
+  const skTag=e=>s.skill&&(e.k==='a'||e.k==='d')?` · ${s.skill} ${sgn(skPts(e.k,e.i,s.skill))}`:'';
+  box.innerHTML=`<p class="small muted">${hits.length} result${hits.length===1?'':'s'}</p><div class="cards">`+shown.map(e=>`<button type="button" class="card" data-act="${openAct[e.k]}" data-i="${e.i}">${dot(refR([e.k,e.i]))}<span class="t"><b>${esc(refName([e.k,e.i]))}</b><span class="kind">${esc(kindLine(e.k,e.i)+skTag(e))}</span></span></button>`).join('')+'</div>'+(hits.length>showLimit?`<div class="row" style="margin-top:12px"><button type="button" class="btn" data-act="more">Show ${Math.min(300,hits.length-showLimit)} more</button><span class="small muted">${hits.length-showLimit} not shown</span></div>`:'');
 }
 
 function render(){
   document.querySelectorAll('nav.tabs button').forEach(b=>b.setAttribute('aria-current',String(b.dataset.tab===S.tab)));
   const y=window.scrollY;
-  $('#main').innerHTML=S.tab==='sets'?renderSets():S.tab==='bags'?renderBags():renderSearch();
+  $('#main').innerHTML=S.tab==='sets'?renderSets():S.tab==='bags'?renderBags():S.tab==='compare'?renderCompare():renderSearch();
+  const nc=S.compare.w.length+S.compare.a.length;$('#cmp-badge').innerHTML=nc?`<span class="badge">${nc}</span>`:'';
   if(S.tab==='search')renderResults();
   window.scrollTo(0,y);
   if(stack.length)renderDrawer();
@@ -740,6 +875,7 @@ function equipView(v){
   if(k==='w'){
     const w=weapons[i];
     parts.push(`<div class="dtitle"><div class="row">${dot(w.r)}<h2>${esc(w.n)}</h2></div><div class="jp">${esc(w.j)}</div><div class="small muted">${esc(w.c)} · Rarity ${w.r}${w.tk?' · ticket forge':''}</div></div>`);
+    parts.push(`<div class="row">${addToSet(v)}${cmpButton('w',i)}${tryButton(v)}<span class="spacer"></span><a class="btn sm" href="${BASE}weapons" target="_blank" rel="noopener">Weapons on wiki ↗</a></div>`);parts.push(tryPanel(v));
     parts.push(`<div class="box"><h3>Stats</h3>${weaponStats(w)}</div>`);
     const chain=weaponChain(i);
     if(chain.length>1) parts.push(`<div class="src"><h3>Upgrade path</h3><div class="chain">${chain.map(c=>c===i?`<span class="cur">${esc(weapons[c].n)}</span>`:`<button type="button" data-act="open-w" data-i="${c}">${esc(weapons[c].n)}</button>`).join(' → ')}</div></div>`);
@@ -749,10 +885,11 @@ function equipView(v){
     if(w.u&&w.from!=null) parts.push(`<div class="box"><div class="row"><h3>Materials · Upgrade from ${esc(weapons[w.from].n)}</h3><span class="spacer"></span><span class="z">${fmt(w.p)}z</span></div>${chips(w.u)}</div>`);
     if(chain.length>1){if(!v.mode)v.mode='path';const st=weaponSteps(i,v.mode,v.end),agg=aggregate([{k:'w',i,mode:v.mode,end:v.end}]);
       parts.push(`<div class="box total"><div class="row"><h3>Materials (total)</h3><span class="spacer"></span><span class="z">${fmt(agg.z)}z</span></div><div class="ctls">${startSelect('dv',0,i,v.mode)}${endSelect('dv',0,i,v.mode,v.end)}</div><div class="small muted">${st.length?st.length+' step'+(st.length===1?'':'s')+': '+st.map(x=>esc(x.label)).join(' · '):'Nothing to do: you already have it.'}</div>${chips(agg.rows.map(r=>[r.i,r.q]))}</div>`);}
-    parts.push(`<div class="row">${addToSet(v)}<span class="spacer"></span><a class="btn sm" href="${BASE}weapons" target="_blank" rel="noopener">Weapons on wiki ↗</a></div>`);
+    
   }else if(k==='a'){
     const a=armor[i],mx=maxLv(a);if(!v.lv)v.lv=1;
     parts.push(`<div class="dtitle"><div class="row">${dot(a.r)}<h2>${esc(a.n)}</h2></div><div class="jp">${esc(a.j)}</div><div class="small muted">${SLOT_LABEL[a.c]} · Rarity ${a.r}${a.hc?' · '+a.hc:''}${a.sex?' · '+a.sex:''}</div></div>`);
+    parts.push(`<div class="row">${addToSet(v)}${cmpButton('a',i)}${tryButton(v)}<span class="spacer"></span><a class="btn sm" href="${BASE}armor" target="_blank" rel="noopener">Armor on wiki ↗</a></div>`);parts.push(tryPanel(v));
     parts.push(`<div class="row"><span class="small muted">Level</span><div class="seg" role="group" aria-label="Level">${Array.from({length:mx},(_,x)=>x+1).map(l=>`<button type="button" data-act="dv-lv" data-lv="${l}" aria-pressed="${v.lv===l}" class="${l<v.lv?'inrange':''}">Lv${l}</button>`).join('')}</div></div>`);
     parts.push(`<div class="box"><h3>Stats</h3>${armorStats(a,v.lv)}</div>`);
     parts.push(`<div class="box"><h3>Skills</h3>${skillList(a.sk)}</div>`);
@@ -762,7 +899,7 @@ function equipView(v){
     parts.push(`<div class="box"><div class="row"><h3>Materials · ${v.lv===1?(a.from!=null?'Upgrade to Lv1':'Forge (Lv1)'):'Lv'+(v.lv-1)+' → Lv'+v.lv}</h3><span class="spacer"></span><span class="z">${fmt(step?step.z:0)}z</span></div>${chips(step?step.mats:[])}</div>`);
     const agg=aggregate([{k:'a',i,cur:0,to:v.lv,path:!!v.path}]);
     parts.push(`<div class="box total"><div class="row"><h3>Materials (total) · up to Lv${v.lv}</h3><span class="spacer"></span><span class="z">${fmt(agg.z)}z</span></div>${a.from!=null?`<label class="small"><input type="checkbox" id="dv-path" data-act="dv-path"${v.path?' checked':''}> Include base piece (${esc(armor[a.from].n)} to Lv${a.bl||1})</label>`:''}${chips(agg.rows.map(r=>[r.i,r.q]))}</div>`);
-    parts.push(`<div class="row">${addToSet(v)}<span class="spacer"></span><a class="btn sm" href="${BASE}armor" target="_blank" rel="noopener">Armor on wiki ↗</a></div>`);
+    
   }else{
     const d=decos[i];
     parts.push(`<div class="dtitle"><div class="row">${dot(d.r)}<h2>${esc(d.n)}</h2></div><div class="jp">${esc(d.j)}</div><div class="small muted">Decoration · Rarity ${d.r}</div></div>`);
@@ -796,6 +933,18 @@ document.addEventListener('click',e=>{
   const act=t.dataset.act,d=t.dataset;const set=curSet();const v=stack[stack.length-1];
   switch(act){
     case 'tab':S.tab=d.tab;save();render();window.scrollTo(0,0);break;
+    case 'cmp-toggle':{const k=d.k,i=+d.i,L=S.compare[k],x=L.indexOf(i);if(x>=0)L.splice(x,1);else if(L.length<MAX_CMP){L.push(i);S.cmpKind=k;}save();render();break;}
+    case 'cmp-remove':{const L=S.compare[d.k],x=L.indexOf(+d.i);if(x>=0)L.splice(x,1);save();render();break;}
+    case 'cmp-clear':S.compare[S.cmpKind]=[];save();render();break;
+    case 'cmp-kind':S.cmpKind=d.v;save();render();break;
+    case 'cmp-lv':S.cmpLv=d.v;save();render();break;
+    case 'try-toggle':v.tryOpen=!v.tryOpen;if(v.tryOpen&&v.trySet==null)v.trySet=S.cur;renderDrawer();break;
+    case 'try-set':v.trySet=+d.id;renderDrawer();break;
+    case 'try-apply':{const set=S.sets.find(x=>x.id===+d.id);if(!set)break;
+      if(v.t==='w'){const had=set.slots.Weapon;if(had&&had.i!==v.i)dropDecos(set,'Weapon');set.slots.Weapon={i:v.i,mode:v.mode&&weaponChain(v.i).length>1?v.mode:defaultWMode(v.i),end:v.end!=null?+v.end:undefined};}
+      else{const c=armor[v.i].c,had=set.slots[c];if(had&&had.i!==v.i)dropDecos(set,c);set.slots[c]={i:v.i,cur:0,to:v.lv||1,path:!!v.path};}
+      save();render();renderDrawer();const el=document.querySelector('#added-msg');if(el)el.textContent='Swapped into '+set.name;break;}
+    case 'cmp-browse':S.search.type=S.cmpKind;S.search.q='';S.tab='search';save();render();window.scrollTo(0,0);break;
     case 'item':openView({t:'item',i:+d.i,q:1});break;
     case 'open-w':openView({t:'w',i:+d.i});break;
     case 'open-a':{const g=Object.values(curSet().slots).find(x=>x&&x.i===+d.i&&armor[+d.i]);openView({t:'a',i:+d.i,lv:1});break;}
@@ -836,6 +985,7 @@ document.addEventListener('click',e=>{
     case 'ac':S.search.ac=d.v;showLimit=150;save();render();break;
     case 'cls':S.search.cls=d.v;showLimit=150;save();render();break;
     case 'more':showLimit+=300;renderResults();break;
+    case 'skill-clear':S.search.skill='';save();render();break;
     case 'wgroup':{if(!S.search.collapsed)S.search.collapsed={};const k=d.g;if(S.search.collapsed[k])delete S.search.collapsed[k];else S.search.collapsed[k]=1;save();renderResults();break;}
     case 'wgroup-all':{if(!S.search.collapsed)S.search.collapsed={};if(d.v==='1'){document.querySelectorAll('[data-act="wgroup"]').forEach(b=>S.search.collapsed[b.dataset.g]=1);}else S.search.collapsed={};save();renderResults();break;}
     case 'quick':S.search.q=d.v;$('#q').value=d.v;save();renderResults();break;
@@ -878,6 +1028,7 @@ document.addEventListener('change',e=>{
     if(d.act==='wstart'){g.mode=t.value;const ch=weaponChain(g.i);if(g.end!=null&&g.mode.startsWith('from:')&&ch.indexOf(+g.end)<=ch.indexOf(+g.mode.slice(5)))delete g.end;if(g.mode==='f')delete g.end;}
     else g.end=+t.value===g.i?undefined:+t.value;
     if(d.scope==='dv')renderDrawer();else{save();render();}}
+  else if(d.act==='skill-filter'){S.search.skill=t.value;showLimit=150;save();render();}
   else if(d.act==='dv-path'){stack[stack.length-1].path=t.checked;renderDrawer();}
   else if(d.act==='have'){setHave(+d.i,t.value);render();}
   else if(d.act==='only-missing'){S.onlyMissing=t.checked;save();render();}
