@@ -295,18 +295,18 @@ function defaultWMode(i){const w=weapons[i];return (w.u&&w.from!=null)?'from:'+w
 /* where the weapon's materials start: forge it directly, forge the base and upgrade all the way, or start from a weapon you already own */
 function weaponStarts(i){
   const w=weapons[i],chain=weaponChain(i),o=[];
-  if(w.f) o.push(['f',chain.length>1?'Forge '+w.n+' directly':'Forge '+w.n]);
   if(chain.length>1){
-    o.push(['path','Nothing yet (forge '+weapons[chain[0]].n+')']);
-    chain.slice(0,-1).reverse().forEach(c=>o.push(['from:'+c,'I have '+weapons[c].n]));
+    o.push(['path','Full path (forge '+weapons[chain[0]].n+')']);
+    chain.slice(0,-1).forEach(c=>o.push(['from:'+c,weapons[c].n+' (already owned)']));
   }
+  if(w.f) o.push(['f',chain.length>1?'Forge '+w.n+' directly':'Forge '+w.n]);
   return o;
 }
 function normMode(i,m){if(m==='u'){const w=weapons[i];return w.from!=null?'from:'+w.from:'f';}return m||defaultWMode(i);}
 function startSelect(scope,id,i,mode){
   const o=weaponStarts(i);if(o.length<2)return '';
   const cur=normMode(i,mode);
-  return `<div class="ctl"><label for="wstart-${scope}-${id}">Start from</label><select id="wstart-${scope}-${id}" data-act="wstart" data-scope="${scope}" data-id="${id}">${o.map(([v,l])=>`<option value="${v}"${v===cur?' selected':''}>${esc(l)}</option>`).join('')}</select></div>`;
+  return `<div class="ctl"><label for="wstart-${scope}-${id}">Path from</label><select id="wstart-${scope}-${id}" data-act="wstart" data-scope="${scope}" data-id="${id}">${o.map(([v,l])=>`<option value="${v}"${v===cur?' selected':''}>${esc(l)}</option>`).join('')}</select></div>`;
 }
 function weaponChain(i){const ch=[];const seen=new Set();let c=i;while(c!=null&&!seen.has(c)){seen.add(c);ch.unshift(c);const x=weapons[c];if(x.from==null||!x.u)break;c=x.from;}return ch;}
 function wRoot(i){const seen=new Set();let c=i;while(!seen.has(c)){seen.add(c);const x=weapons[c];if(x.from==null||!x.u||weapons[x.from].c!==weapons[i].c)break;c=x.from;}return c;}
