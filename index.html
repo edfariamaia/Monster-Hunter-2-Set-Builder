@@ -310,16 +310,24 @@ function startSelect(scope,id,i,mode){
 }
 function weaponChain(i){const ch=[];const seen=new Set();let c=i;while(c!=null&&!seen.has(c)){seen.add(c);ch.unshift(c);const x=weapons[c];if(x.from==null||!x.u)break;c=x.from;}return ch;}
 function wRoot(i){const seen=new Set();let c=i;while(!seen.has(c)){seen.add(c);const x=weapons[c];if(x.from==null||!x.u||weapons[x.from].c!==weapons[i].c)break;c=x.from;}return c;}
-function weaponSteps(i,mode){
-  const w=weapons[i];mode=normMode(i,mode);
-  if(mode.startsWith('from:')){const start=+mode.slice(5),ch=weaponChain(i),k=ch.indexOf(start);
-    if(k>=0) return ch.slice(k+1).map(c=>{const x=weapons[c];return {label:'Upgrade '+weapons[x.from].n+' → '+x.n,mats:x.u||[],z:x.p};});}
-  if(mode==='path') return weaponChain(i).map((c,k)=>{const x=weapons[c];
+/* the weapon a path actually reaches: the chosen end point if it lies on this weapon's path, else the weapon itself */
+function wEnd(i,end){return end!=null&&weaponChain(i).includes(+end)?+end:i;}
+function weaponSteps(i,mode,end){
+  const T=wEnd(i,end),w=weapons[T],chain=weaponChain(T);mode=normMode(i,mode);
+  if(mode.startsWith('from:')){const k=chain.indexOf(+mode.slice(5));
+    if(k>=0) return chain.slice(k+1).map(c=>{const x=weapons[c];return {label:'Upgrade '+weapons[x.from].n+' → '+x.n,mats:x.u||[],z:x.p};});
+    if(weaponChain(i).indexOf(+mode.slice(5))>=chain.length-1) return [];}
+  if(mode==='f'&&T===i&&w.f) return [{label:'Forge '+w.n,mats:w.f,z:w.p}];
+  return chain.map((c,k)=>{const x=weapons[c];
     if(k===0) return x.f?{label:'Forge '+x.n,mats:x.f,z:x.p}:{label:x.n+' (base)',mats:x.u||[],z:x.p};
     return {label:'Upgrade to '+x.n,mats:x.u||[],z:x.p};});
-  if(mode==='u'&&w.u) return [{label:'Upgrade '+(w.from!=null?weapons[w.from].n+' → ':'')+w.n,mats:w.u,z:w.p}];
-  if(w.f) return [{label:'Forge '+w.n,mats:w.f,z:w.p}];
-  return [{label:'Upgrade to '+w.n,mats:w.u||[],z:w.p}];
+}
+function endSelect(scope,id,i,mode,end){
+  const chain=weaponChain(i);if(chain.length<2)return '';
+  mode=normMode(i,mode);if(mode==='f')return '';
+  let from=0;if(mode.startsWith('from:'))from=chain.indexOf(+mode.slice(5))+1;
+  const opts=chain.slice(Math.max(from,0));const cur=wEnd(i,end);
+  return `<div class="ctl"><label for="wend-${scope}-${id}">Go up to</label><select id="wend-${scope}-${id}" data-act="wend" data-scope="${scope}" data-id="${id}">${opts.map(c=>`<option value="${c}"${c===cur?' selected':''}>${esc(weapons[c].n)}${c===i?' (this weapon)':''}</option>`).join('')}</select></div>`;
 }
 function armorSteps(i,cur,to,path,depth){
   const a=armor[i],st=[];depth=depth||0;
@@ -335,7 +343,7 @@ function armorSteps(i,cur,to,path,depth){
 }
 function goalSteps(g){
   if(!g||g.i==null) return [];
-  if(g.k==='w') return weaponSteps(g.i,g.mode||defaultWMode(g.i));
+  if(g.k==='w') return weaponSteps(g.i,g.mode||defaultWMode(g.i),g.end);
   if(g.k==='a') return armorSteps(g.i,g.cur||0,Math.max(g.to||1,g.cur||0),!!g.path);
   if(g.k==='d'){const d=decos[g.i],q=g.q||1;return [{label:'Forge '+d.n+(q>1?' ×'+q:''),mats:d.f.map(([i,n])=>[i,n*q]),z:d.p*q}];}
   if(g.k==='i') return [{label:items[g.i].n,mats:[[g.i,g.q||1]],z:0}];
@@ -350,7 +358,7 @@ function setGoals(set){
 /* decoration slots: each piece has 0-3 slots at its target level */
 function pieceSlots(set,p){
   const g=set.slots[p];if(!g)return 0;
-  if(p==='Weapon')return (weapons[g.i].s||{}).sl||0;
+  if(p==='Weapon')return (weapons[wEnd(g.i,g.end)].s||{}).sl||0;
   const a=armor[g.i];if(!a.sl)return 0;
   const k=Math.max(0,Math.min(Math.max(g.to||1,g.cur||0),maxLv(a))-1);return a.sl[k]||0;
 }
@@ -524,8 +532,8 @@ function slotCard(set,sl){
   if(!g) return `<button type="button" class="card add" data-act="goto-slot" data-slot="${sl}"><span class="plus">+</span><span class="kind">${SLOT_LABEL[sl]}</span></button>`;
   if(sl==='Weapon'){
     const w=weapons[g.i],ms=weaponStarts(g.i).length>1?[1]:[];
-    return `<div class="panel slot"><div class="slot-head">${dot(w.r)}<div class="t"><button type="button" data-act="open-w" data-i="${g.i}">${esc(w.n)}</button><span class="kind">Weapon · ${esc(w.c)}</span></div>${pips(set,sl)}<button type="button" class="btn ghost sm" data-act="slot-remove" data-slot="${sl}">Remove</button></div>
-      ${ms.length?`<div class="ctls">${startSelect('set','Weapon',g.i,g.mode)}</div>`:''}
+    return `<div class="panel slot"><div class="slot-head">${dot(w.r)}<div class="t"><button type="button" data-act="open-w" data-i="${g.i}">${esc(w.n)}</button><span class="kind">Weapon · ${esc(w.c)}${wEnd(g.i,g.end)!==g.i?' · stats for '+esc(weapons[wEnd(g.i,g.end)].n):''}</span></div>${pips(set,sl)}<button type="button" class="btn ghost sm" data-act="slot-remove" data-slot="${sl}">Remove</button></div>
+      ${ms.length?`<div class="ctls">${startSelect('set','Weapon',g.i,g.mode)}${endSelect('set','Weapon',g.i,g.mode,g.end)}</div>`:''}
       ${chips(aggregate([Object.assign({k:'w'},g)]).rows.map(r=>[r.i,r.q]))}</div>`;
   }
   const a=armor[g.i],open=!!set.open[sl];
@@ -534,7 +542,7 @@ function slotCard(set,sl){
     <button type="button" class="ext-toggle" data-act="slot-open" data-slot="${sl}" aria-expanded="${open}">${open?'▾ Hide levels':'▸ Show levels and materials'} (max Lv${maxLv(a)})</button>${open?levelTable('set',sl,g):''}</div>`;
 }
 function setStats(set){
-  const w=set.slots.Weapon?weapons[set.slots.Weapon.i]:null, ws=w?w.s||{}:{};
+  const W=set.slots.Weapon,w=W?weapons[wEnd(W.i,W.end)]:null, ws=w?w.s||{}:{};
   let def=0,res=[0,0,0,0,0],slotsArmor=0;const classes=new Set();
   CATS.forEach(c=>{const g=set.slots[c];if(!g)return;const a=armor[g.i];const k=Math.max(0,Math.min(Math.max(g.to||1,g.cur||0),maxLv(a))-1);
     def+=a.def?a.def[k]:0;slotsArmor+=a.sl?a.sl[k]:0;(a.res||[]).forEach((v,x)=>res[x]+=v);if(a.hc)classes.add(a.hc);});
@@ -739,8 +747,8 @@ function equipView(v){
     if(kids.length) parts.push(`<div class="src"><h3>Upgrades into</h3><div class="chips">${kids.map(c=>`<button type="button" class="chip" data-act="open-w" data-i="${c}">${dot(weapons[c].r)}${esc(weapons[c].n)}</button>`).join('')}</div></div>`);
     if(w.f) parts.push(`<div class="box"><div class="row"><h3>Materials · Forge</h3><span class="spacer"></span><span class="z">${fmt(w.p)}z</span></div>${chips(w.f)}</div>`);
     if(w.u&&w.from!=null) parts.push(`<div class="box"><div class="row"><h3>Materials · Upgrade from ${esc(weapons[w.from].n)}</h3><span class="spacer"></span><span class="z">${fmt(w.p)}z</span></div>${chips(w.u)}</div>`);
-    if(chain.length>1){if(!v.mode)v.mode='path';const st=weaponSteps(i,v.mode),agg=aggregate([{k:'w',i,mode:v.mode}]);
-      parts.push(`<div class="box total"><div class="row"><h3>Materials (total)</h3><span class="spacer"></span><span class="z">${fmt(agg.z)}z</span></div><div class="ctls">${startSelect('dv',0,i,v.mode)}</div><div class="small muted">${st.length} step${st.length===1?'':'s'}: ${st.map(x=>esc(x.label)).join(' · ')}</div>${chips(agg.rows.map(r=>[r.i,r.q]))}</div>`);}
+    if(chain.length>1){if(!v.mode)v.mode='path';const st=weaponSteps(i,v.mode,v.end),agg=aggregate([{k:'w',i,mode:v.mode,end:v.end}]);
+      parts.push(`<div class="box total"><div class="row"><h3>Materials (total)</h3><span class="spacer"></span><span class="z">${fmt(agg.z)}z</span></div><div class="ctls">${startSelect('dv',0,i,v.mode)}${endSelect('dv',0,i,v.mode,v.end)}</div><div class="small muted">${st.length?st.length+' step'+(st.length===1?'':'s')+': '+st.map(x=>esc(x.label)).join(' · '):'Nothing to do: you already have it.'}</div>${chips(agg.rows.map(r=>[r.i,r.q]))}</div>`);}
     parts.push(`<div class="row">${addToSet(v)}<span class="spacer"></span><a class="btn sm" href="${BASE}weapons" target="_blank" rel="noopener">Weapons on wiki ↗</a></div>`);
   }else if(k==='a'){
     const a=armor[i],mx=maxLv(a);if(!v.lv)v.lv=1;
@@ -848,7 +856,7 @@ document.addEventListener('click',e=>{
       }else{
         const target=S.sets.find(s=>s.id===+d.id);if(!target)break;
         fromTarget=!!(T&&T.kind!=='bag'&&T.set===target.id);
-        if(v.t==='w'){const had=target.slots.Weapon;if(had&&had.i!==v.i)dropDecos(target,'Weapon');target.slots.Weapon={i:v.i,mode:v.mode&&weaponChain(v.i).length>1?v.mode:defaultWMode(v.i)};msg=(had?'Replaced the weapon in ':'Added to ')+target.name;}
+        if(v.t==='w'){const had=target.slots.Weapon;if(had&&had.i!==v.i)dropDecos(target,'Weapon');target.slots.Weapon={i:v.i,mode:v.mode&&weaponChain(v.i).length>1?v.mode:defaultWMode(v.i),end:v.end!=null?+v.end:undefined};msg=(had?'Replaced the weapon in ':'Added to ')+target.name;}
         else if(v.t==='a'){const c=armor[v.i].c;const had=target.slots[c];if(had&&had.i!==v.i)dropDecos(target,c);target.slots[c]={i:v.i,cur:0,to:v.lv||1,path:!!v.path};msg=(had?'Replaced '+SLOT_LABEL[c].toLowerCase()+' in ':'Added to ')+target.name;}
         else{const useT=fromTarget&&T.kind==='deco';const pc=placeDeco(target,v.i,useT?T.piece:null,useT?T.pos:null);
           if(!pc){ok=false;msg=useT?`Not enough free slots in ${SLOT_LABEL[T.piece]} for a ${decos[v.i].sl}-slot jewel`:`No free ${decos[v.i].sl}-slot space in ${target.name}`;}
@@ -865,7 +873,11 @@ document.addEventListener('change',e=>{
   const t=e.target,d=t.dataset;
   if(d.act==='cur'){const g=getGoal(d.scope,d.id);if(!g)return;g.cur=+t.value;if(g.cur>0)g.path=false;if((g.to||1)<g.cur)g.to=g.cur;if(!g.to||g.to<1)g.to=1;save();render();}
   else if(d.act==='path'){const g=getGoal(d.scope,d.id);if(!g)return;g.path=t.checked;save();render();}
-  else if(d.act==='wstart'){if(d.scope==='dv'){stack[stack.length-1].mode=t.value;renderDrawer();}else{const g=getGoal(d.scope,d.id);if(!g)return;g.mode=t.value;save();render();}}
+  else if(d.act==='wstart'||d.act==='wend'){
+    const g=d.scope==='dv'?stack[stack.length-1]:getGoal(d.scope,d.id);if(!g)return;
+    if(d.act==='wstart'){g.mode=t.value;const ch=weaponChain(g.i);if(g.end!=null&&g.mode.startsWith('from:')&&ch.indexOf(+g.end)<=ch.indexOf(+g.mode.slice(5)))delete g.end;if(g.mode==='f')delete g.end;}
+    else g.end=+t.value===g.i?undefined:+t.value;
+    if(d.scope==='dv')renderDrawer();else{save();render();}}
   else if(d.act==='dv-path'){stack[stack.length-1].path=t.checked;renderDrawer();}
   else if(d.act==='have'){setHave(+d.i,t.value);render();}
   else if(d.act==='only-missing'){S.onlyMissing=t.checked;save();render();}
