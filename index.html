@@ -162,6 +162,12 @@ tr.done .ilink{text-decoration:line-through}
 .have input::-webkit-inner-spin-button{-webkit-appearance:none}
 .left{font-family:var(--f-mono);font-weight:600}
 /* search */
+.wgroup{display:grid;gap:8px}
+.ghead{display:flex;align-items:center;gap:8px;border:0;background:none;padding:2px 0;font-size:.82rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;justify-self:start}
+.ghead:hover{color:var(--ink)}
+.ghead .arr{display:inline-block;width:1em;color:var(--accent);font-size:.95rem}
+.ghead .cnt{font-family:var(--f-mono);font-weight:400;letter-spacing:0}
+.groups{display:grid;gap:16px}
 .searchbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
 .searchbar input{flex:1 1 260px;min-width:0;font-size:1.05rem;padding:10px 14px}
 /* drawer */
@@ -287,6 +293,7 @@ const maxLv=a=>a.def&&a.def.length?a.def.length:(a.lv&&a.lv.length?Math.max(1,..
 function weaponModes(i){const w=weapons[i],m=[];if(w.f)m.push('f');if(w.u&&w.from!=null)m.push('u');if(w.from!=null)m.push('path');return m;}
 function defaultWMode(i){const w=weapons[i];return (w.u&&w.from!=null)?'u':'f';}
 function weaponChain(i){const ch=[];const seen=new Set();let c=i;while(c!=null&&!seen.has(c)){seen.add(c);ch.unshift(c);const x=weapons[c];if(x.from==null||!x.u)break;c=x.from;}return ch;}
+function wRoot(i){const seen=new Set();let c=i;while(!seen.has(c)){seen.add(c);const x=weapons[c];if(x.from==null||!x.u||weapons[x.from].c!==weapons[i].c)break;c=x.from;}return c;}
 function weaponSteps(i,mode){
   const w=weapons[i];
   if(mode==='path') return weaponChain(i).map((c,k)=>{const x=weapons[c];
@@ -620,6 +627,16 @@ function renderResults(){
     if(e.k==='w'&&s.type==='w'&&s.wc!=='all'&&weapons[e.i].c!==s.wc)return false;
     if(e.k==='a'&&s.type==='a'&&s.ac!=='all'&&armor[e.i].c!==s.ac)return false;
     return terms.every(t=>e.key.includes(t));});
+  if(s.type==='w'){
+    if(!S.search.collapsed)S.search.collapsed={};
+    const groups=new Map();
+    hits.forEach(e=>{const r=wRoot(e.i);const k=weapons[r].c+'|'+r;if(!groups.has(k))groups.set(k,{r,list:[]});groups.get(k).list.push(e);});
+    const anyOpen=[...groups.keys()].some(k=>!S.search.collapsed[k]);
+    box.innerHTML=`<div class="row" style="margin-bottom:10px"><span class="small muted">${hits.length} weapon${hits.length===1?'':'s'} in ${groups.size} group${groups.size===1?'':'s'}</span><span class="spacer"></span><button type="button" class="btn sm" data-act="wgroup-all" data-v="${anyOpen?'1':'0'}">${anyOpen?'Collapse all':'Expand all'}</button></div><div class="groups">`+
+      [...groups].map(([k,g])=>{const closed=!!S.search.collapsed[k];
+        return `<div class="wgroup"><button type="button" class="ghead" data-act="wgroup" data-g="${esc(k)}" aria-expanded="${!closed}"><span class="arr">${closed?'▸':'▾'}</span>${esc(weapons[g.r].n)} group <span class="cnt">${g.list.length}</span>${s.wc==='all'?`<span class="cnt">· ${esc(weapons[g.r].c)}</span>`:''}</button>${closed?'':`<div class="cards">`+g.list.map(e=>`<button type="button" class="card" data-act="open-w" data-i="${e.i}">${dot(weapons[e.i].r)}<span class="t"><b>${esc(weapons[e.i].n)}</b><span class="kind">${esc(kindLine('w',e.i))}</span></span></button>`).join('')+'</div>'}</div>`;}).join('')+'</div>';
+    return;
+  }
   const shown=hits.slice(0,showLimit);
   box.innerHTML=`<p class="small muted">${hits.length} result${hits.length===1?'':'s'}</p><div class="cards">`+shown.map(e=>`<button type="button" class="card" data-act="${openAct[e.k]}" data-i="${e.i}">${dot(refR([e.k,e.i]))}<span class="t"><b>${esc(refName([e.k,e.i]))}</b><span class="kind">${esc(kindLine(e.k,e.i))}</span></span></button>`).join('')+'</div>'+(hits.length>showLimit?`<div class="row" style="margin-top:12px"><button type="button" class="btn" data-act="more">Show ${Math.min(300,hits.length-showLimit)} more</button><span class="small muted">${hits.length-showLimit} not shown</span></div>`:'');
 }
@@ -792,6 +809,8 @@ document.addEventListener('click',e=>{
     case 'ac':S.search.ac=d.v;showLimit=150;save();render();break;
     case 'cls':S.search.cls=d.v;showLimit=150;save();render();break;
     case 'more':showLimit+=300;renderResults();break;
+    case 'wgroup':{if(!S.search.collapsed)S.search.collapsed={};const k=d.g;if(S.search.collapsed[k])delete S.search.collapsed[k];else S.search.collapsed[k]=1;save();renderResults();break;}
+    case 'wgroup-all':{if(!S.search.collapsed)S.search.collapsed={};if(d.v==='1'){document.querySelectorAll('[data-act="wgroup"]').forEach(b=>S.search.collapsed[b.dataset.g]=1);}else S.search.collapsed={};save();renderResults();break;}
     case 'quick':S.search.q=d.v;$('#q').value=d.v;save();renderResults();break;
     case 'dv-lv':v.lv=+d.lv;renderDrawer();break;
     case 'vq':{const mx=v.t==='item'?(items[v.i].mx||99):99;v.q=Math.max(1,Math.min(mx,(v.q||1)+(+d.d)));renderDrawer();break;}
