@@ -10,6 +10,8 @@ An unofficial fan tool for **Monster Hunter 2 (Dos)**, the Japan-only PS2 game.
 
 Everything runs in the browser from a single `index.html`. There is no server and no login. Each visitor's sets and bags are saved only in their own browser.
 
+Open the site: https://edfariamaia.github.io/Monster-Hunter-2-Set-Builder/
+
 ## Credits
 
 All equipment, item, skill and location data comes from the [Monster Hunter 2 Wiki at Monster Hunter Oldschool](https://wiki.mholdschool.com/mh2/), which sources it from [mmPotato's MH2 wiki](http://mh2kaiseki.web.fc2.com/index.html) and from data mined from the game by 2Tie, Yuzucchi and Vic. English names follow the [English language patch by Break Arts](https://break-arts.com/projects/mh2dos/) and the [MHF2 wiki](https://monsterhunter.fandom.com/wiki/Monster_Hunter_Freedom_2). Thanks to the Monster Hunter Oldschool community.
