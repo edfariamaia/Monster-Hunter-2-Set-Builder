@@ -205,7 +205,7 @@ details.grp>summary .cnt{margin-left:auto;font-family:var(--f-mono);font-size:.8
 .bag .card{align-items:center;min-height:56px}
 .qty-max{color:var(--warn)!important;font-weight:700}
 .slotno{font-family:var(--f-mono);font-size:.72rem;color:var(--muted);min-width:1.6em}
-.addset{display:flex;flex-direction:row-reverse;justify-content:flex-end;gap:8px;flex-wrap:wrap;align-items:center}
+.addset{display:grid;gap:8px;justify-items:start}
 .addset .opts{display:flex;flex-wrap:wrap;gap:6px}
 .confirm{display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap}
 .credits{border-top:1px solid var(--line);background:var(--panel);color:var(--muted);font-size:.85rem}
@@ -358,7 +358,7 @@ if(OLD&&OLD.sets){ // carry sets over from the previous version
 function aggregate(goals){
   const m=new Map();let z=0;
   goals.forEach(g=>goalSteps(g).forEach(s=>{z+=s.z||0;s.mats.forEach(([i,q])=>{if(i>=0)m.set(i,(m.get(i)||0)+q);});}));
-  const rows=[...m].map(([i,q])=>({i,q})).sort((a,b)=>items[a.i].n.localeCompare(items[b.i].n));
+  const rows=[...m].map(([i,q])=>({i,q})).sort((a,b)=>b.q-a.q||items[a.i].n.localeCompare(items[b.i].n));
   return {rows,z};
 }
 const have=i=>Math.max(0,parseInt(S.have[i]||0,10)||0);
@@ -651,7 +651,7 @@ function addToSet(v){
   const mark=id=>T&&(isBag?(T.kind==='bag'&&T.bag===id):(T.kind!=='bag'&&T.set===id));
   const opts=list.map(s=>`<button type="button" class="btn sm" data-act="add-to" data-id="${s.id}">${esc(s.name)}${mark(s.id)?' ★':''}</button>`).join('');
   const dis=isBag&&!(items[v.i].mx>0);
-  return `<div class="addset"><button type="button" class="btn primary" data-act="addset-toggle" aria-expanded="${!!v.addOpen}"${dis?' disabled title="This item cannot be carried"':''}>◂ Add to ${isBag?'bag':'set'}</button>${v.addOpen?`<div class="opts">${opts}</div>`:''}<span id="added-msg" class="small muted"></span></div>`;
+  return `<div class="addset"><button type="button" class="btn primary" data-act="addset-toggle" aria-expanded="${!!v.addOpen}"${dis?' disabled title="This item cannot be carried"':''}>${v.addOpen?'▾':'◂'} Add to ${isBag?'bag':'set'}</button>${v.addOpen?`<div class="opts">${opts}</div>`:''}<span id="added-msg" class="small muted"></span></div>`;
 }
 function craftsWith(i){
   const out=[],seen=new Set();
