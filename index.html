@@ -1002,7 +1002,7 @@ document.addEventListener('click',e=>{
         else{let pos=fromTarget&&!bag.slots[T.pos]?T.pos:bag.slots.findIndex(x=>!x);
           if(pos<0){ok=false;msg=bag.name+' is full ('+BAG_SIZE+' spaces)';}
           else{bag.slots[pos]={i:v.i,q:Math.min(mx,v.q||1)};msg='Added to '+bag.name+', space '+(pos+1);}}
-        if(ok&&fromTarget){S.curBag=bag.id;S.tab='bags';}
+        if(ok&&fromTarget){S.curBag=bag.id;}
       }else{
         const target=S.sets.find(s=>s.id===+d.id);if(!target)break;
         fromTarget=!!(T&&T.kind!=='bag'&&T.set===target.id);
@@ -1011,11 +1011,11 @@ document.addEventListener('click',e=>{
         else{const useT=fromTarget&&T.kind==='deco';const pc=placeDeco(target,v.i,useT?T.piece:null,useT?T.pos:null);
           if(!pc){ok=false;msg=useT?`Not enough free slots in ${SLOT_LABEL[T.piece]} for a ${decos[v.i].sl}-slot jewel`:`No free ${decos[v.i].sl}-slot space in ${target.name}`;}
           else msg='Socketed into '+SLOT_LABEL[pc]+' in '+target.name;}
-        if(ok&&fromTarget){S.cur=target.id;S.tab='sets';}
+        if(ok&&fromTarget){S.cur=target.id;}
       }
       v.addOpen=false;save();
-      if(ok&&fromTarget){S.target=null;save();closeDrawer();render();window.scrollTo(0,0);}
-      else{render();renderDrawer();flash(msg);}
+      if(ok&&fromTarget){S.target=null;save();}
+      render();renderDrawer();flash(msg);
       break;}
   }
 });
