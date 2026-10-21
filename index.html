@@ -185,6 +185,39 @@ table.cmp tr.sec th{padding-top:16px;color:var(--ink);font-size:.78rem}
 .searchbar input{flex:1 1 260px;min-width:0;font-size:1.05rem;padding:10px 14px}
 /* drawer */
 .backdrop{position:fixed;inset:0;background:rgba(10,14,12,.45);z-index:40}
+.searchlayout{display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:20px;align-items:start}
+.miniset{position:sticky;top:calc(76px + env(safe-area-inset-top,0px));z-index:45;max-height:calc(100vh - 96px);overflow-y:auto;padding:12px 14px;display:grid;gap:10px;box-shadow:var(--shadow)}
+.miniset h3{margin:0}
+.mrow{display:grid;grid-template-columns:62px minmax(0,1fr) auto;gap:6px;align-items:baseline;padding:5px 0;border-top:1px solid var(--line);font-size:.9rem}
+.mrow:first-of-type{border-top:0}
+.mrow .lab{font-size:.68rem;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:700}
+.mrow .nm{border:0;background:none;padding:0;text-align:left;font-weight:600;min-width:0;overflow-wrap:anywhere}
+.mrow .nm:hover{color:var(--accent)}
+.mrow .lv{font-family:var(--f-mono);font-size:.78rem;color:var(--muted)}
+.mrow .empty{color:var(--muted);font-style:italic}
+.mdecos{grid-column:2/-1;display:flex;flex-wrap:wrap;gap:4px}
+.dchip{font-size:.76rem;padding:1px 7px;border-radius:999px;border:1px solid var(--line);background:var(--sunk)}
+.dchip.free{border-style:dashed;background:transparent;color:var(--muted)}
+.mstats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+.mstats .kv{padding:6px 8px}
+.mstats .kv b{font-size:.95rem}
+.slotmap{display:grid;gap:6px}
+.slotmap .prow{display:grid;grid-template-columns:70px minmax(0,1fr);gap:8px;align-items:center}
+.slotmap .prow .lab{font-size:.7rem;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:700}
+.slotmap .cells{display:flex;flex-wrap:wrap;gap:6px}
+.slotmap .cell{border:1px solid var(--line);border-radius:8px;padding:4px 9px;font-size:.85rem;background:var(--sunk)}
+.slotmap .cell.free{border-style:dashed;background:transparent}
+button.cell.free{color:var(--accent);font-weight:600}
+button.cell.free:hover{border-color:var(--accent)}
+.slotmap .cell.na{color:var(--muted);border-style:dotted;background:transparent}
+@media (min-width:1000px){
+  body.dock-left aside.drawer{left:0;right:auto;width:min(620px,calc(100% - 370px));border-left:0;border-right:1px solid var(--line)}
+  body.dock-left .backdrop{background:rgba(10,14,12,.25)}
+}
+@media (max-width:999px){
+  .searchlayout{grid-template-columns:minmax(0,1fr)}
+  .miniset{position:static;max-height:none;box-shadow:none;order:-1}
+}
 aside.drawer{position:fixed;top:0;right:0;bottom:0;width:min(660px,100%);background:var(--panel);z-index:50;box-shadow:var(--shadow);display:flex;flex-direction:column;border-left:1px solid var(--line)}
 .dhead{display:flex;gap:8px;align-items:center;padding:calc(10px + env(safe-area-inset-top,0px)) max(14px,env(safe-area-inset-right,0px)) 10px 14px;border-bottom:1px solid var(--line)}
 .dbody{overflow-y:auto;padding:16px max(18px,env(safe-area-inset-right,0px)) calc(40px + env(safe-area-inset-bottom,0px)) 18px;display:grid;gap:18px;align-content:start}
@@ -755,6 +788,34 @@ function buildIndex(){
   decos.forEach((d,i)=>INDEX.push({k:'d',i,key:norm(d.n+' '+d.j)}));
   items.forEach((o,i)=>{if(o.n&&!o.un)INDEX.push({k:'i',i,key:norm(o.n+' '+o.j)});});
 }
+function slotMap(set,decoI){
+  const lay=decoLayout(set);const rows=[];
+  SLOTS.forEach(p=>{const P=lay.L[p];const g=set.slots[p];
+    let cells='';
+    if(!g) cells='<span class="cell na">no piece</span>';
+    else if(!P.n) cells='<span class="cell na">no slots</span>';
+    else for(let c=0;c<P.n;c++){const v=P.cells[c];
+      if(v===null) cells+=decoI!=null?`<button type="button" class="cell free" data-act="sock" data-set="${set.id}" data-piece="${p}" data-pos="${c}" title="Socket here">◯ Socket here</button>`:'<span class="cell free">◯ free</span>';
+      else if(v>=0){const dd=decos[set.decos[v].i];cells+=`<span class="cell">● ${esc(dd.n)}${dd.sl>1?' ('+dd.sl+' slots)':''}</span>`;}}
+    rows.push(`<div class="prow"><span class="lab">${SLOT_LABEL[p]}</span><div class="cells">${cells}</div></div>`);});
+  return `<div class="slotmap">${rows.join('')}</div>`;
+}
+function miniSet(){
+  const set=curSet(),lay=decoLayout(set),st=computeStats(set);
+  const rows=SLOTS.map(p=>{const g=set.slots[p];
+    if(!g) return `<div class="mrow"><span class="lab">${SLOT_LABEL[p]}</span><span class="empty">empty</span><span></span></div>`;
+    const isW=p==='Weapon',x=isW?weapons[wEnd(g.i,g.end)]:armor[g.i];
+    const P=lay.L[p];let dc='';for(let c=0;c<P.n;c++){const v=P.cells[c];if(v===null)dc+='<span class="dchip free">◯</span>';else if(v>=0)dc+=`<span class="dchip">${esc(decos[set.decos[v].i].n)}</span>`;}
+    return `<div class="mrow"><span class="lab">${SLOT_LABEL[p]}</span><button type="button" class="nm" data-act="open-${isW?'w':'a'}" data-i="${isW?wEnd(g.i,g.end):g.i}">${dot(x.r)} ${esc(x.n)}</button><span class="lv">${isW?'':'Lv'+Math.max(g.to||1,g.cur||0)}</span>${dc?`<div class="mdecos">${dc}</div>`:''}</div>`;}).join('');
+  const acts=Object.values(st.act);
+  return `<aside class="panel miniset" aria-label="Current set">
+    <div class="row"><h3>Current set</h3><span class="spacer"></span><button type="button" class="btn ghost sm" data-act="tab" data-tab="sets">Open ›</button></div>
+    ${S.sets.length>1?`<div class="row">${S.sets.map(x=>`<button type="button" class="btn sm${x.id===set.id?' on':''}" data-act="set-pick" data-id="${x.id}">${esc(x.name)}</button>`).join('')}</div>`:`<b>${esc(set.name)}</b>`}
+    <div>${rows}</div>
+    <div class="mstats"><div class="kv"><span>Attack</span><b>${st.w?st.atk:'—'}</b></div><div class="kv"><span>Defense</span><b>${st.def}</b></div><div class="kv"><span>Slots</span><b>${st.slotsUsed}/${st.slotsTotal}</b></div></div>
+    <div class="actives">${acts.length?acts.map(a=>`<span class="pill${a[0]<0?' neg':''}">${esc(a[1])}</span>`).join(''):'<span class="small muted">No active skills yet</span>'}</div>
+  </aside>`;
+}
 function renderSearch(){
   const s=S.search;
   const types=[['all','All'],['w','Weapons'],['a','Armor'],['d','Decorations'],['i','Items']];
@@ -764,12 +825,12 @@ function renderSearch(){
   if(s.type==='a'||s.type==='d'){const trees=Object.keys(skills).sort();
     sub+=`<div class="row"><label class="small muted" for="skill-filter">Skill</label><select id="skill-filter" data-act="skill-filter"><option value="">Any skill</option>${trees.map(t=>`<option value="${esc(t)}"${s.skill===t?' selected':''}>${esc(t)}</option>`).join('')}</select>${s.skill?`<span class="small muted">Pieces with positive ${esc(s.skill)} points, highest first.</span><button type="button" class="btn ghost sm" data-act="skill-clear">Clear</button>`:''}</div>`;}
   const T=S.target;const tgt=T&&(T.kind==='bag'?S.bags.find(x=>x.id===T.bag):S.sets.find(x=>x.id===T.set));
-  return `<section class="stack">
+  return `<div class="searchlayout"><section class="stack">
     ${tgt?`<div class="note row">Choosing <b>${esc(T.label)}</b> for <b>${esc(tgt.name)}</b>. Open an entry and use <b>◂ Add to ${T.kind==='bag'?'bag':'set'}</b>.<span class="spacer"></span><button type="button" class="btn ghost sm" data-act="target-clear">Dismiss</button></div>`:''}
     <div class="searchbar"><input id="q" type="search" placeholder="${s.type==='all'?'Search everything: Rathalos, Kirin, Machalite…':'Filter by name (English or Japanese)'}" value="${esc(s.q)}" autocomplete="off" aria-label="Search">
     <div class="seg text" role="group" aria-label="Type">${types.map(([v,l])=>`<button type="button" data-act="stype" data-v="${v}" aria-pressed="${s.type===v}">${l}</button>`).join('')}</div></div>
     ${sub}
-    <div id="results"></div></section>`;
+    <div id="results"></div></section>${miniSet()}</div>`;
 }
 let showLimit=150;
 function skPts(k,i,tree){const f=((k==='a'?armor:decos)[i].sk||[]).find(x=>x[0]===tree);return f&&f[1]!=null?parseInt(f[1],10):0;}
@@ -803,6 +864,7 @@ function renderResults(){
 
 function render(){
   document.querySelectorAll('nav.tabs button').forEach(b=>b.setAttribute('aria-current',String(b.dataset.tab===S.tab)));
+  document.body.classList.toggle('dock-left',S.tab==='search');
   const y=window.scrollY;
   $('#main').innerHTML=S.tab==='sets'?renderSets():S.tab==='bags'?renderBags():S.tab==='compare'?renderCompare():renderSearch();
   const nc=S.compare.w.length+S.compare.a.length;$('#cmp-badge').innerHTML=nc?`<span class="badge">${nc}</span>`:'';
@@ -905,6 +967,8 @@ function equipView(v){
     parts.push(`<div class="dtitle"><div class="row">${dot(d.r)}<h2>${esc(d.n)}</h2></div><div class="jp">${esc(d.j)}</div><div class="small muted">Decoration · Rarity ${d.r}</div></div>`);
     parts.push(`<div class="box"><h3>Stats</h3><div class="statgrid"><div class="kv"><span>Slots used</span><b>${'◯'.repeat(d.sl)}</b></div><div class="kv"><span>Price</span><b>${fmt(d.p)}z</b></div></div></div>`);
     parts.push(`<div class="box"><h3>Skills</h3>${skillList(d.sk)}</div>`);
+    {const tset=(S.target&&S.target.kind==='deco'&&S.sets.find(x=>x.id===S.target.set))||curSet();
+     parts.push(`<div class="box"><div class="row"><h3>Slots in ${esc(tset.name)}</h3><span class="spacer"></span>${S.sets.length>1?`<select id="sm-set" data-act="sm-set" aria-label="Set">${S.sets.map(x=>`<option value="${x.id}"${x.id===tset.id?' selected':''}>${esc(x.name)}</option>`).join('')}</select>`:''}</div><div class="small muted">${d.n} needs ${d.sl} free slot${d.sl>1?'s':''} in the same piece. Pick a free slot to socket it there.</div>${slotMap(tset,i)}<span id="sock-msg" class="small muted"></span></div>`);}
     parts.push(`<div class="box"><div class="row"><h3>Materials</h3><span class="spacer"></span><span class="z">${fmt(d.p)}z</span></div>${chips(d.f)}</div>`);
     parts.push(`<div class="row">${addToSet(v)}<span class="spacer"></span><a class="btn sm" href="${BASE}armor" target="_blank" rel="noopener">Decorations on wiki ↗</a></div>`);
   }
@@ -940,6 +1004,10 @@ document.addEventListener('click',e=>{
     case 'cmp-lv':S.cmpLv=d.v;save();render();break;
     case 'try-toggle':v.tryOpen=!v.tryOpen;if(v.tryOpen&&v.trySet==null)v.trySet=S.cur;renderDrawer();break;
     case 'try-set':v.trySet=+d.id;renderDrawer();break;
+    case 'sock':{const set=S.sets.find(x=>x.id===+d.set);if(!set||!v)break;const pc=placeDeco(set,v.i,d.piece,+d.pos);
+      const ok=pc===d.piece;if(!ok&&pc){set.decos.pop();}
+      save();render();renderDrawer();const m=document.querySelector('#sock-msg');if(m)m.textContent=ok?'Socketed into '+SLOT_LABEL[d.piece]+' in '+set.name:'Not enough free slots in '+SLOT_LABEL[d.piece]+' for a '+decos[v.i].sl+'-slot jewel';
+      if(ok&&S.target&&S.target.kind==='deco'){S.target=null;save();}break;}
     case 'try-apply':{const set=S.sets.find(x=>x.id===+d.id);if(!set)break;
       if(v.t==='w'){const had=set.slots.Weapon;if(had&&had.i!==v.i)dropDecos(set,'Weapon');set.slots.Weapon={i:v.i,mode:v.mode&&weaponChain(v.i).length>1?v.mode:defaultWMode(v.i),end:v.end!=null?+v.end:undefined};}
       else{const c=armor[v.i].c,had=set.slots[c];if(had&&had.i!==v.i)dropDecos(set,c);set.slots[c]={i:v.i,cur:0,to:v.lv||1,path:!!v.path};}
@@ -1028,6 +1096,7 @@ document.addEventListener('change',e=>{
     if(d.act==='wstart'){g.mode=t.value;const ch=weaponChain(g.i);if(g.end!=null&&g.mode.startsWith('from:')&&ch.indexOf(+g.end)<=ch.indexOf(+g.mode.slice(5)))delete g.end;if(g.mode==='f')delete g.end;}
     else g.end=+t.value===g.i?undefined:+t.value;
     if(d.scope==='dv')renderDrawer();else{save();render();}}
+  else if(d.act==='sm-set'){S.cur=+t.value;save();render();renderDrawer();}
   else if(d.act==='skill-filter'){S.search.skill=t.value;showLimit=150;save();render();}
   else if(d.act==='dv-path'){stack[stack.length-1].path=t.checked;renderDrawer();}
   else if(d.act==='have'){setHave(+d.i,t.value);render();}
