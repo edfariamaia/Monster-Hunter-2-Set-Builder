@@ -662,10 +662,12 @@ function setStats(set){
       <div class="kv"><span>Slots</span><b>${usedSlots} / ${totalSlots}</b><small>${lay.over.length?lay.over.length+' decoration'+(lay.over.length>1?'s':'')+' without room':'used / max'}</small></div>
     </div>
     <div class="res5">${ELEMS.map((e,x)=>`<div class="kv"><span class="el-${e.toLowerCase()}">${e} res</span><b>${sgn(res[x])}</b></div>`).join('')}</div>
-    ${ws.sh?`<div class="src"><h3>Sharpness</h3>${sharpBar(ws.sh[0])}</div>`:''}
+    ${ws.sh?(()=>{const hp=tot.Handicraft||0,act=activeFor('Handicraft',hp);const up=act&&act[0]>0,down=act&&act[0]<0;
+      return `<div class="src"><div class="row"><h3>Sharpness</h3>${up?'<span class="pill">Handicraft active: Sharpness +1</span>':down?'<span class="pill neg">Sharpness -1 active</span>':`<span class="small muted">Handicraft ${hp?sgn(hp):'0'} / +10 for Sharpness +1</span>`}</div>${sharpBar(up?ws.sh[1]:ws.sh[0])}${down?'<div class="small muted">The wiki lists no reduced bar for Sharpness -1, so the normal bar is shown.</div>':''}</div>`;})():''}
     <div class="src"><h3>Active skills</h3>${actives.length?`<div class="actives">${actives.map(([n,p,a])=>`<span class="pill${a[0]<0?' neg':''}" title="${esc(n)} ${sgn(p)}">${esc(a[1])}${a[2]?' '+esc(a[2]):''}</span>`).join('')}</div>`:'<span class="muted small">No skill reaches its activation threshold yet.</span>'}</div>
-    ${trees.length?`<div class="tablewrap"><table class="grid"><thead><tr><th>Skill tree</th><th class="n">Points</th><th>Active</th><th>Next</th></tr></thead><tbody>${trees.map(([n,p])=>{const a=activeFor(n,p),nx=nextFor(n,p);
-      return `<tr><td>${esc(n)}</td><td class="n">${sgn(p)}</td><td>${a?`<span class="${a[0]<0?'skill-neg':'skill-on'}">${esc(a[1])}</span>`:'<span class="muted">—</span>'}</td><td class="small muted">${nx?`${esc(nx[1])} at ${sgn(nx[0])}`:''}</td></tr>`;}).join('')}</tbody></table></div>`:''}
+    ${trees.length?`<div class="tablewrap"><table class="grid"><thead><tr><th>Skill tree</th><th class="n">Now / to activate</th><th>Active</th><th>Next skill</th></tr></thead><tbody>${trees.map(([n,p])=>{const a=activeFor(n,p),nx=nextFor(n,p);
+      const pct=nx?Math.max(0,Math.min(100,p/nx[0]*100)):100;
+      return `<tr><td>${esc(n)}</td><td class="n"><b>${sgn(p)}</b>${nx?` <span class="muted">/ ${sgn(nx[0])}</span>`:' <span class="muted">(max)</span>'}<div class="progress" style="height:4px;margin-top:4px"><i style="width:${pct}%;${p<0?'background:var(--warn)':''}"></i></div></td><td>${a?`<span class="${a[0]<0?'skill-neg':'skill-on'}">${esc(a[1])}</span>`:'<span class="muted">—</span>'}</td><td class="small muted">${nx?`${esc(nx[1])}${nx[0]-p>0?` · ${nx[0]-p} to go`:''}`:''}</td></tr>`;}).join('')}</tbody></table></div>`:''}
   </section>`;
 }
 function renderSets(){
@@ -808,10 +810,22 @@ function miniSet(){
     const P=lay.L[p];let dc='';for(let c=0;c<P.n;c++){const v=P.cells[c];if(v===null)dc+='<span class="dchip free">◯</span>';else if(v>=0)dc+=`<span class="dchip">${esc(decos[set.decos[v].i].n)}</span>`;}
     return `<div class="mrow"><span class="lab">${SLOT_LABEL[p]}</span><button type="button" class="nm" data-act="open-${isW?'w':'a'}" data-i="${isW?wEnd(g.i,g.end):g.i}">${dot(x.r)} ${esc(x.n)}</button><span class="lv">${isW?'':'Lv'+Math.max(g.to||1,g.cur||0)}</span>${dc?`<div class="mdecos">${dc}</div>`:''}</div>`;}).join('');
   const acts=Object.values(st.act);
+  // decorations socketed in this set, grouped by jewel
+  const byJ=new Map();lay.fit.forEach(x=>{const e=byJ.get(x.i)||{n:0,pieces:[]};e.n++;e.pieces.push(SLOT_LABEL[x.p]);byJ.set(x.i,e);});
+  const dskill={};lay.fit.forEach(x=>(decos[x.i].sk||[]).forEach(([n,q])=>{dskill[n]=(dskill[n]||0)+(parseInt(q,10)||0);}));
+  const free=st.slotsTotal-st.slotsUsed;
+  const decoBox=`<div class="box" style="padding:10px;gap:6px${S.search.type==='d'?';border-color:var(--accent)':''}">
+    <div class="row"><h3>Decorations</h3><span class="spacer"></span><span class="small"><b>${lay.fit.length}</b> jewel${lay.fit.length===1?'':'s'} · <b>${st.slotsUsed}/${st.slotsTotal}</b> slots</span></div>
+    ${byJ.size?[...byJ].map(([i,e])=>`<div class="row" style="gap:6px"><button type="button" class="nm ilink" data-act="open-d" data-i="${i}">${dot(decos[i].r)} ${esc(decos[i].n)}</button><span class="small muted">×${e.n} · ${esc([...new Set(e.pieces)].join(', '))}</span></div>`).join(''):'<span class="small muted">No decorations socketed yet.</span>'}
+    ${Object.keys(dskill).length?`<div class="small muted">From jewels: ${Object.entries(dskill).map(([n,q])=>esc(n)+' '+sgn(q)).join(', ')}</div>`:''}
+    <div class="small ${free>0?'':'muted'}">${st.slotsTotal?(free>0?free+' free slot'+(free===1?'':'s')+' left':'All slots are full'):'No slots yet: add a weapon or armor with slots'}${lay.over.length?` · <span style="color:var(--warn)">${lay.over.length} without room</span>`:''}</div>
+  </div>`;
   return `<aside class="panel miniset" aria-label="Current set">
     <div class="row"><h3>Current set</h3><span class="spacer"></span><button type="button" class="btn ghost sm" data-act="tab" data-tab="sets">Open ›</button></div>
     ${S.sets.length>1?`<div class="row">${S.sets.map(x=>`<button type="button" class="btn sm${x.id===set.id?' on':''}" data-act="set-pick" data-id="${x.id}">${esc(x.name)}</button>`).join('')}</div>`:`<b>${esc(set.name)}</b>`}
+    ${S.search.type==='d'?decoBox:''}
     <div>${rows}</div>
+    ${S.search.type==='d'?'':decoBox}
     <div class="mstats"><div class="kv"><span>Attack</span><b>${st.w?st.atk:'—'}</b></div><div class="kv"><span>Defense</span><b>${st.def}</b></div><div class="kv"><span>Slots</span><b>${st.slotsUsed}/${st.slotsTotal}</b></div></div>
     <div class="actives">${acts.length?acts.map(a=>`<span class="pill${a[0]<0?' neg':''}">${esc(a[1])}</span>`).join(''):'<span class="small muted">No active skills yet</span>'}</div>
   </aside>`;
