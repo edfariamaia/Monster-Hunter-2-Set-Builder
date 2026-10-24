@@ -163,7 +163,8 @@ tr.done .ilink{text-decoration:line-through}
 .have input::-webkit-inner-spin-button{-webkit-appearance:none}
 .left{font-family:var(--f-mono);font-weight:600}
 /* search */
-.wgroup{display:grid;gap:8px}
+.wgroup{display:grid;gap:8px;content-visibility:auto;contain-intrinsic-size:auto 320px}
+#results .cards>.card{content-visibility:auto;contain-intrinsic-size:auto 66px}
 .ghead{display:flex;align-items:center;gap:8px;border:0;background:none;padding:2px 0;font-size:.82rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;justify-self:start}
 .ghead:hover{color:var(--ink)}
 .ghead .arr{display:inline-block;width:1em;color:var(--accent);font-size:.95rem}
@@ -187,7 +188,7 @@ table.cmp tr.sec th{padding-top:16px;color:var(--ink);font-size:.78rem}
 .backdrop{position:fixed;inset:0;background:rgba(10,14,12,.45);z-index:40}
 .pv{display:grid;justify-items:center;gap:6px;padding:12px;border:1px solid var(--line);border-radius:12px;background:radial-gradient(circle at 50% 40%,var(--panel),var(--sunk))}
 .pv img{max-width:100%;width:260px;height:auto;aspect-ratio:1/1;object-fit:contain}
-.pv.armor img{width:300px;aspect-ratio:auto;max-height:360px}
+.pv.armor img{width:300px;aspect-ratio:360/330;max-height:360px}
 .pv .cap{font-size:.78rem;color:var(--muted);text-align:center}
 .noimg{font-size:.85rem;color:var(--muted);text-align:center;padding:18px 6px}
 .cmphead .thumb{width:110px;height:110px;object-fit:contain}
@@ -512,7 +513,7 @@ function preview(k,x){
   const page=k==='w'?BASE+'weapons':'https://monsterhunter.fandom.com/wiki/File:'+(x.img||'').split('/').pop();
   if(!src) return `<div class="pv"><div class="noimg">No in-game image is available for this piece.</div></div>`;
   const cap=k==='w'?'Image: Monster Hunter 2 Wiki':`Full set: ${esc(x.imgSet)}${x.imgFb?' (base version, the '+esc(x.n.slice(-1))+' version may look different)':''}<br>${esc(x.imgSrc&&x.imgSrc!=='2nd gen render'?x.imgSrc:'2nd generation render')} · Monster Hunter Wiki (Fandom)`;
-  return `<div class="pv${k==='a'?' armor':''}"><img src="${src}" alt="${esc(x.n)}" loading="lazy" referrerpolicy="no-referrer" data-fallback="${esc(page)}"><div class="cap">${cap}</div></div>`;
+  return `<div class="pv${k==='a'?' armor':''}"><img src="${src}" alt="${esc(x.n)}" ${k==='w'?'width="260" height="260"':'width="360" height="330"'} loading="lazy" decoding="async" referrerpolicy="no-referrer" data-fallback="${esc(page)}"><div class="cap">${cap}</div></div>`;
 }
 document.addEventListener('error',e=>{const t=e.target;if(t&&t.tagName==='IMG'&&t.dataset.fallback!==undefined&&!t.dataset.failed){t.dataset.failed='1';
   if(!t.dataset.fallback){t.remove();return;}
@@ -746,7 +747,7 @@ function renderCompare(){
   const kinds=[['w','Weapons'],['a','Armor']];
   const head=`<div class="row"><h2>Compare</h2><div class="seg text" role="group" aria-label="Equipment type">${kinds.map(([v,l])=>`<button type="button" data-act="cmp-kind" data-v="${v}" aria-pressed="${k===v}">${l} (${S.compare[v].length})</button>`).join('')}</div><span class="spacer"></span>${list.length?`<button type="button" class="btn ghost sm" data-act="cmp-clear">Clear ${k==='w'?'weapons':'armor'}</button>`:''}</div>`;
   if(!list.length) return `<section class="stack">${head}<div class="panel pad"><p style="margin:0 0 6px"><b>Nothing to compare yet.</b></p><p class="muted" style="margin:0">Open any ${k==='w'?'weapon':'armor piece'} in <b>Search</b> or from a set and press <b>⇄ Compare</b>. You can line up to ${MAX_CMP} side by side; the best value in each row is highlighted.</p></div><div class="row"><button type="button" class="btn primary" data-act="cmp-browse">Browse ${k==='w'?'weapons':'armor'}</button></div></section>`;
-  const cols=list.map(i=>`<th scope="col"><div class="cmphead">${(()=>{const src=k==='w'?weaponImg(weapons[i]):armorImg(armor[i],220);return src?`<img class="thumb" src="${src}" alt="" loading="lazy" referrerpolicy="no-referrer" data-fallback="">`:'';})()}${dot(SRC[k][i].r)}<button type="button" class="nm" data-act="open-${k}" data-i="${i}">${esc(SRC[k][i].n)}</button><span class="kind">${esc(kindLine(k,i))}</span><button type="button" class="btn ghost sm" data-act="cmp-remove" data-k="${k}" data-i="${i}" style="justify-self:start">Remove</button></div></th>`).join('');
+  const cols=list.map(i=>`<th scope="col"><div class="cmphead">${(()=>{const src=k==='w'?weaponImg(weapons[i]):armorImg(armor[i],220);return src?`<img class="thumb" src="${src}" alt="" width="110" height="110" loading="lazy" decoding="async" referrerpolicy="no-referrer" data-fallback="">`:'';})()}${dot(SRC[k][i].r)}<button type="button" class="nm" data-act="open-${k}" data-i="${i}">${esc(SRC[k][i].n)}</button><span class="kind">${esc(kindLine(k,i))}</span><button type="button" class="btn ghost sm" data-act="cmp-remove" data-k="${k}" data-i="${i}" style="justify-self:start">Remove</button></div></th>`).join('');
   const rows=[];
   if(k==='w'){
     const W=list.map(i=>weapons[i]),s=W.map(w=>w.s||{});
@@ -921,6 +922,7 @@ function renderDrawer(){
   $('#drawer').hidden=false;$('#backdrop').hidden=false;
   $('#dhead').innerHTML=`${stack.length>1?'<button type="button" class="btn ghost" data-act="back">← Back</button>':''}<span class="spacer"></span><button type="button" class="btn ghost" data-act="close" aria-label="Close">Close ✕</button>`;
   const body=$('#dbody');const keep=v._r?body.scrollTop:0;
+  LAZY=new Map();
   body.innerHTML=v.t==='item'?itemView(v):equipView(v);
   body.scrollTop=keep;v._r=true;
 }
@@ -937,9 +939,15 @@ function craftsWith(i){
     const key=ing.map(x=>items[x].n).join('+')+'='+o.n+q+p;if(seen.has(key))return;seen.add(key);out.push({k,ing,q,p});}));
   return out;
 }
+/* collapsed groups keep their rows here and are filled the first time they open */
+let LAZY=new Map(),lazyId=0;
 function linesGroup(title,rows,open){
-  return `<details class="grp"${open?' open':''}><summary>${title}<span class="cnt">${rows.length}</span></summary><div class="lines">${rows.join('')}</div></details>`;
+  if(open) return `<details class="grp" open><summary>${title}<span class="cnt">${rows.length}</span></summary><div class="lines">${rows.join('')}</div></details>`;
+  const id='lz'+(++lazyId);LAZY.set(id,rows);
+  return `<details class="grp" data-lazy="${id}"><summary>${title}<span class="cnt">${rows.length}</span></summary><div class="lines"></div></details>`;
 }
+document.addEventListener('toggle',e=>{const dt=e.target;if(!dt||!dt.open||!dt.dataset||!dt.dataset.lazy)return;
+  const rows=LAZY.get(dt.dataset.lazy);if(rows){dt.querySelector('.lines').innerHTML=rows.join('');LAZY.delete(dt.dataset.lazy);}delete dt.dataset.lazy;},true);
 function pctHTML(s){const [a,b,c]=(String(s).match(/n\/a|[^/]+/g)||[]);const f=x=>x==null||x==='n/a'?'—':x;return `<span class="pct"><span class="w">${f(a)}</span> · <span class="c">${f(b)}</span> · <span class="b">${f(c)}</span></span>`;}
 const hubName=s=>s.replace('Village','Village (Jumbo)').replace('Town','Town (Dundorma)');
 function itemView(v){
@@ -1140,9 +1148,13 @@ document.addEventListener('change',e=>{
   else if(d.act==='have'){setHave(+d.i,t.value);render();}
   else if(d.act==='only-missing'){S.onlyMissing=t.checked;save();render();}
 });
+let qTimer=0;
 document.addEventListener('input',e=>{
   const t=e.target;
-  if(t.id==='q'){S.search.q=t.value;showLimit=150;save();renderResults();}
+  if(t.id==='q'){S.search.q=t.value;showLimit=150;
+    const big=S.search.type==='w'||(S.search.type==='a'&&S.search.ac==='all');
+    clearTimeout(qTimer);
+    if(big) qTimer=setTimeout(()=>{save();renderResults();},120); else {save();renderResults();}}
   else if(t.dataset.act==='have'){setHave(+t.dataset.i,t.value);}
 });
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&stack.length)closeDrawer();});
