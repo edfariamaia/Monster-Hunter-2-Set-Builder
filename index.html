@@ -10,7 +10,7 @@
   --accent:#8f6210; --accent-soft:#ecdcb8; --accent-ink:#ffffff;
   --ok:#2c7a46; --ok-soft:#d5ead9; --warn:#a9501a; --bad-soft:#f2d9cc;
   --warm:#b8432a; --cold:#2b68a8; --breed:#3a8336;
-  --fire:#c8431f; --water:#2a6fb5; --thunder:#b08d00; --ice:#3c9fb8; --dragon:#7a3fa6;
+  --fire:#c8431f; --water:#2a6fb5; --thunder:#b08d00; --ice:#3c9fb8; --dragon:#7a3fa6; --poison:#8a3d9c; --paralysis:#a08a00; --sleep:#4a6a8a;
   --shadow:0 10px 30px rgba(28,36,32,.18);
   --f-display:"Alegreya SC","Palatino Linotype",Georgia,serif;
   --f-body:"Alegreya Sans","Segoe UI",system-ui,"Hiragino Sans","Yu Gothic",sans-serif;
@@ -23,7 +23,7 @@
   --accent:#dba84a; --accent-soft:#3a3020; --accent-ink:#1a1408;
   --ok:#6cc28a; --ok-soft:#1f3527; --warn:#e48a52; --bad-soft:#3d2519;
   --warm:#e47a5f; --cold:#73a9e3; --breed:#7cc476;
-  --fire:#ef7a55; --water:#6ea8e8; --thunder:#e2c447; --ice:#73cbe0; --dragon:#b585e0;
+  --fire:#ef7a55; --water:#6ea8e8; --thunder:#e2c447; --ice:#73cbe0; --dragon:#b585e0; --poison:#c58ad6; --paralysis:#e0cf5a; --sleep:#9bb6d4;
   --shadow:0 10px 30px rgba(0,0,0,.5); color-scheme:dark;
 }}
 :root[data-theme="dark"]{
@@ -31,7 +31,7 @@
   --accent:#dba84a; --accent-soft:#3a3020; --accent-ink:#1a1408;
   --ok:#6cc28a; --ok-soft:#1f3527; --warn:#e48a52; --bad-soft:#3d2519;
   --warm:#e47a5f; --cold:#73a9e3; --breed:#7cc476;
-  --fire:#ef7a55; --water:#6ea8e8; --thunder:#e2c447; --ice:#73cbe0; --dragon:#b585e0;
+  --fire:#ef7a55; --water:#6ea8e8; --thunder:#e2c447; --ice:#73cbe0; --dragon:#b585e0; --poison:#c58ad6; --paralysis:#e0cf5a; --sleep:#9bb6d4;
   --shadow:0 10px 30px rgba(0,0,0,.5); color-scheme:dark;
 }
 *{box-sizing:border-box}
@@ -131,7 +131,8 @@ button.chip:hover{border-color:var(--accent)}
 .kv small{font-size:.8rem;color:var(--muted)}
 .res5{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px}
 .res5 .kv{text-align:center}
-.el-fire{color:var(--fire)} .el-water{color:var(--water)} .el-thunder{color:var(--thunder)} .el-ice{color:var(--ice)} .el-dragon{color:var(--dragon)}
+.el-fire{color:var(--fire)} .el-water{color:var(--water)} .el-thunder{color:var(--thunder)} .el-ice{color:var(--ice)} .el-dragon{color:var(--dragon)} .el-poison{color:var(--poison)} .el-paralysis{color:var(--paralysis)} .el-sleep{color:var(--sleep)}
+.subtabs button .dot{margin-right:5px}
 .sharp{display:flex;height:12px;border-radius:3px;overflow:hidden;background:var(--sunk);border:1px solid var(--line);max-width:340px}
 .sharp i{display:block;height:100%}
 .notes{display:inline-flex;gap:4px}
@@ -309,6 +310,7 @@ const BASE='https://wiki.mholdschool.com/mh2/';
 const CATS=['Headgear','Torso','Arms','Waist','Legs'];
 const SLOTS=['Weapon',...CATS];
 const SLOT_LABEL={Weapon:'Weapon',Headgear:'Head',Torso:'Torso',Arms:'Arms',Waist:'Waist',Legs:'Legs'};
+const WELEMS=['all','Fire','Water','Thunder','Ice','Dragon','Poison','Paralysis','Sleep','none'];
 const WCLASSES=['Great Sword','Longsword','Sword and Shield','Dual Swords','Hammer','Hunting Horn','Lance','Gunlance','Light Bowgun','Heavy Bowgun','Bow'];
 const RANK={LR:'Village / Low Rank',HR:'High Rank',Dojo:'Dojo'};
 const ELEMS=['Fire','Water','Thunder','Ice','Dragon'];
@@ -372,7 +374,7 @@ function sanitizeState(){
   if(!['1','2','3','4','5','6','7','max'].includes(S.cmpLv))S.cmpLv='max';
   if(!['sets','bags','search','compare'].includes(S.tab))S.tab='sets';
   const sr=isObj(S.search)?S.search:{};
-  S.search={type:['all','w','a','d','i'].includes(sr.type)?sr.type:'all',wc:typeof sr.wc==='string'?sr.wc:'all',ac:['all',...CATS].includes(sr.ac)?sr.ac:'all',q:typeof sr.q==='string'?sr.q.slice(0,60):'',skill:typeof sr.skill==='string'&&skills[sr.skill]?sr.skill:'',collapsed:isObj(sr.collapsed)?sr.collapsed:{}};
+  S.search={type:['all','w','a','d','i'].includes(sr.type)?sr.type:'all',wc:typeof sr.wc==='string'?sr.wc:'all',ac:['all',...CATS].includes(sr.ac)?sr.ac:'all',q:typeof sr.q==='string'?sr.q.slice(0,60):'',skill:typeof sr.skill==='string'&&skills[sr.skill]?sr.skill:'',el:typeof sr.el==='string'&&WELEMS.includes(sr.el)?sr.el:'all',collapsed:isObj(sr.collapsed)?sr.collapsed:{}};
   if(!isObj(S.target))S.target=null;
   S.onlyMissing=!!S.onlyMissing;
   if(!S.sets.find(s=>s.id===S.cur))S.cur=S.sets[0].id;
@@ -538,7 +540,7 @@ function refR(r){return SRC[r[0]][r[1]].r;}
 const openAct={w:'open-w',a:'open-a',d:'open-d',i:'item'};
 const kindLine=(k,i)=>{
   if(k==='a'){const a=armor[i];return [SLOT_LABEL[a.c],a.hc,a.sex,'Rarity '+a.r].filter(Boolean).join(' · ');}
-  if(k==='w'){const w=weapons[i];return [w.c,'Rarity '+w.r].join(' · ');}
+  if(k==='w'){const w=weapons[i],x=w.s||{};return [w.c,'Rarity '+w.r,x.el?x.el+' '+(x.ev||''):''].filter(Boolean).join(' · ');}
   if(k==='d'){const d=decos[i];return 'Decoration · '+d.sl+' slot'+(d.sl>1?'s':'');}
   return 'Item · Rarity '+items[i].r;
 };
@@ -902,7 +904,9 @@ function renderSearch(){
   const s=S.search;
   const types=[['all','All'],['w','Weapons'],['a','Armor'],['d','Decorations'],['i','Items']];
   let sub='';
-  if(s.type==='w') sub=`<div class="subtabs" role="group" aria-label="Weapon type">${[['all','All weapons'],...WCLASSES.map(c=>[c,c])].map(([v,l])=>`<button type="button" data-act="wc" data-v="${v}" aria-pressed="${s.wc===v}">${l}</button>`).join('')}</div>`;
+  if(s.type==='w'){sub=`<div class="subtabs" role="group" aria-label="Weapon type">${[['all','All weapons'],...WCLASSES.map(c=>[c,c])].map(([v,l])=>`<button type="button" data-act="wc" data-v="${v}" aria-pressed="${s.wc===v}">${l}</button>`).join('')}</div>`;
+    const el=s.el||'all';
+    sub+=`<div class="row"><span class="small muted">Element / status</span><div class="subtabs" role="group" aria-label="Element or status">${WELEMS.map(v=>`<button type="button" data-act="wel" data-v="${v}" aria-pressed="${el===v}"${v!=='all'&&v!=='none'?` class="el-${v.toLowerCase()}"`:''}>${v==='all'?'Any':v==='none'?'No element':v}</button>`).join('')}</div></div>`;}
   if(s.type==='a') sub=`<div class="subtabs" role="group" aria-label="Armor part">${[['all','All armor'],...CATS.map(c=>[c,SLOT_LABEL[c]])].map(([v,l])=>`<button type="button" data-act="ac" data-v="${v}" aria-pressed="${s.ac===v}">${l}</button>`).join('')}</div>`;
   if(s.type==='a'||s.type==='d'){const trees=Object.keys(skills).sort();
     sub+=`<div class="row"><label class="small muted" for="skill-filter">Skill</label><select id="skill-filter" data-act="skill-filter"><option value="">Any skill</option>${trees.map(t=>`<option value="${esc(t)}"${s.skill===t?' selected':''}>${esc(t)}</option>`).join('')}</select>${s.skill?`<span class="small muted">Pieces with positive ${esc(s.skill)} points, highest first.</span><button type="button" class="btn ghost sm" data-act="skill-clear">Clear</button>`:''}</div>`;}
@@ -925,6 +929,7 @@ function renderResults(){
   const hits=INDEX.filter(e=>{
     if(s.type!=='all'&&e.k!==s.type)return false;
     if(e.k==='w'&&s.type==='w'&&s.wc!=='all'&&weapons[e.i].c!==s.wc)return false;
+    if(e.k==='w'&&s.type==='w'&&s.el&&s.el!=='all'){const el=(weapons[e.i].s||{}).el||'';if(s.el==='none'?el!=='':el!==s.el)return false;}
     if(e.k==='a'&&s.type==='a'&&s.ac!=='all'&&armor[e.i].c!==s.ac)return false;
     if(s.skill&&(s.type==='a'||s.type==='d')&&!(skPts(e.k,e.i,s.skill)>0))return false;
     return terms.every(t=>e.key.includes(t));});
@@ -1154,6 +1159,7 @@ function onClick(t,act,d){
     case 'inc':case 'dec':{const i=+d.i;setHave(i,have(i)+(act==='inc'?1:-1));render();break;}
     case 'stype':S.search.type=d.v;showLimit=150;save();render();break;
     case 'wc':S.search.wc=d.v;showLimit=150;save();render();break;
+    case 'wel':S.search.el=d.v;showLimit=150;save();render();break;
     case 'ac':S.search.ac=d.v;showLimit=150;save();render();break;
     case 'cls':S.search.cls=d.v;showLimit=150;save();render();break;
     case 'more':showLimit+=300;renderResults();break;
