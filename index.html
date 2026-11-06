@@ -330,7 +330,7 @@ const SH_MAX=Math.max(...weapons.filter(w=>w.s&&w.s.sh).map(w=>Math.max(...w.s.s
 /* ---------- state ---------- */
 const KEY='mhdos-item-counter-v3';
 const BAG_SIZE=20;
-const blankSet=(id,name)=>({id,name,slots:{Weapon:null,Headgear:null,Torso:null,Arms:null,Waist:null,Legs:null},decos:[],open:{}});
+const blankSet=(id,name)=>({id,name,slots:{Weapon:null,Headgear:null,Torso:null,Arms:null,Waist:null,Legs:null},decos:[],open:{},have:{}});
 const blankBag=(id,name)=>({id,name,slots:Array(BAG_SIZE).fill(null)});
 let S={tab:'sets',sets:[blankSet(1,'Set 1')],cur:1,bags:[blankBag(1,'Bag 1')],curBag:1,have:{},onlyMissing:false,search:{type:'all',wc:'all',ac:'all',q:''},compare:{w:[],a:[]},cmpKind:'w',cmpLv:'max',target:null,newSet:false,newBag:false};
 let OLD=null;
@@ -344,6 +344,7 @@ let DROPPED=0;
 // how many references (pieces, jewels, bag items, compared entries) the state holds; used to notice drops
 function refCount(st){let n=0;try{(st.sets||[]).forEach(s=>{if(s&&s.slots)Object.values(s.slots).forEach(g=>{if(g)n++;});n+=(s&&s.decos||[]).length;});
   (st.bags||[]).forEach(b=>(b&&b.slots||[]).forEach(x=>{if(x)n++;}));n+=((st.compare||{}).w||[]).length+((st.compare||{}).a||[]).length;}catch(e){}return n;}
+function cleanHave(h){const hv={};if(isObj(h))for(const [k,v] of Object.entries(h)){const i=+k,n=int(v,0,9999,0);if(isIdx(i,items)&&n>0)hv[i]=n;}return hv;}
 function sanitizeState(){
   const r0=refCount(S);
   const maxLvA=a=>a.def&&a.def.length?a.def.length:1;
@@ -359,8 +360,12 @@ function sanitizeState(){
     const s=blankSet(id,typeof o.name==='string'&&o.name.trim()?o.name.slice(0,30):'Set '+(k+1));
     if(isObj(o.slots))SLOTS.forEach(sl=>s.slots[sl]=cleanSlot(sl,o.slots[sl]));
     s.decos=(Array.isArray(o.decos)?o.decos:[]).filter(x=>isObj(x)&&SLOTS.includes(x.p)&&Number.isInteger(x.pos)&&x.pos>=0&&x.pos<3&&isIdx(x.i,decos)&&s.slots[x.p]).map(x=>({p:x.p,pos:x.pos,i:x.i}));
-    s.open=isObj(o.open)?o.open:{};return s;});
+    s.open=isObj(o.open)?o.open:{};s.have=cleanHave(o.have);s._hadHave=isObj(o.have);return s;});
   S.sets=sets.length?sets:[blankSet(1,'Set 1')];
+  // Older saves kept one shared "I have" list; give each existing set its own copy of it.
+  const legacy=cleanHave(S.have);
+  S.sets.forEach(x=>{if(!x._hadHave&&Object.keys(legacy).length)x.have={...legacy};delete x._hadHave;});
+  delete S.have;
   const bids=new Set();
   let bags=Array.isArray(S.bags)?S.bags.filter(isObj).slice(0,MAX_SETS):[];
   bags=bags.map((o,k)=>{let id=Number.isInteger(o.id)&&!bids.has(o.id)?o.id:null;if(id==null){id=1;while(bids.has(id))id++;}bids.add(id);
@@ -368,7 +373,6 @@ function sanitizeState(){
     if(Array.isArray(o.slots))for(let k2=0;k2<BAG_SIZE;k2++){const x=o.slots[k2];if(isObj(x)&&isIdx(x.i,items)&&items[x.i].mx!==0)b.slots[k2]={i:x.i,q:int(x.q,1,items[x.i].mx||99,1)};}
     return b;});
   S.bags=bags.length?bags:[blankBag(1,'Bag 1')];
-  const hv={};if(isObj(S.have))for(const [k,v] of Object.entries(S.have)){const i=+k,n=int(v,0,9999,0);if(isIdx(i,items)&&n>0)hv[i]=n;}S.have=hv;
   const cmp=isObj(S.compare)?S.compare:{};
   S.compare={w:[...new Set((Array.isArray(cmp.w)?cmp.w:[]).filter(i=>isIdx(i,weapons)))].slice(0,4),a:[...new Set((Array.isArray(cmp.a)?cmp.a:[]).filter(i=>isIdx(i,armor)))].slice(0,4)};
   if(!['w','a'].includes(S.cmpKind))S.cmpKind='w';
@@ -486,7 +490,7 @@ if(OLD&&OLD.sets){ // carry sets over from the previous version
     (o.extras||[]).forEach(x=>{if(x.k==='d')for(let n=0;n<(x.q||1);n++)placeDeco(s,x.i,null,null);
       else if(x.k==='i'){const b=S.bags[0];const e=b.slots.findIndex(v=>!v);if(e>=0)b.slots[e]={i:x.i,q:Math.min(x.q||1,items[x.i].mx||99)};}});
     return s;});
-  S.cur=S.sets[0].id;S.have=OLD.have||{};try{sanitizeState();}catch(e){}save();
+  S.cur=S.sets[0].id;S.sets.forEach(x=>x.have={...(OLD.have||{})});try{sanitizeState();}catch(e){}save();
 }
 function aggregate(goals){
   const m=new Map();let z=0;
@@ -494,8 +498,9 @@ function aggregate(goals){
   const rows=[...m].map(([i,q])=>({i,q})).sort((a,b)=>b.q-a.q||items[a.i].n.localeCompare(items[b.i].n));
   return {rows,z};
 }
-const have=i=>Math.max(0,parseInt(S.have[i]||0,10)||0);
-function setHave(i,v){v=Math.max(0,Math.min(9999,parseInt(v,10)||0));if(v)S.have[i]=v;else delete S.have[i];save();}
+const setHaveMap=()=>{const c=curSet();if(!isObj(c.have))c.have={};return c.have;};
+const have=i=>Math.max(0,parseInt(setHaveMap()[i]||0,10)||0);
+function setHave(i,v){const h=setHaveMap();v=Math.max(0,Math.min(9999,parseInt(v,10)||0));if(v)h[i]=v;else delete h[i];save();}
 
 /* ---------- skills ---------- */
 function activeFor(tree,pts){
@@ -1011,7 +1016,7 @@ function itemView(v){
   const i=v.i,o=items[i];const parts=[];
   parts.push(`<div class="dtitle"><div class="row">${dot(o.r)}<h2>${esc(o.n)}</h2></div><div class="jp">${esc(o.j)}</div><div class="small muted">Rarity ${o.r}${o.s?` · sells for ${fmt(o.s)}z`:''}${o.b?` · buy ${fmt(o.b)}z`:''}</div>${o.d?`<p style="margin:6px 0 0">${esc(o.d)}</p>`:''}</div>`);
   const need=aggregate(setGoals(curSet())).rows.find(r=>r.i===i);
-  parts.push(`<div class="box"><div class="row"><span class="small muted">I have</span><span class="have"><button type="button" data-act="dec" data-i="${i}" aria-label="Less">−</button><input id="have-drawer-${i}" type="number" min="0" data-act="have" data-i="${i}" value="${have(i)}" aria-label="How many I have"><button type="button" data-act="inc" data-i="${i}" aria-label="More">+</button></span><span class="small muted">${need?`${esc(curSet().name)} needs ${need.q}`:''}</span><span class="spacer"></span><a class="btn sm" href="${BASE}items#item-${i}" target="_blank" rel="noopener">Open on wiki ↗</a></div>
+  parts.push(`<div class="box"><div class="row"><span class="small muted">I have <span title="Counts are kept separately for each set">(${esc(curSet().name)})</span></span><span class="have"><button type="button" data-act="dec" data-i="${i}" aria-label="Less">−</button><input id="have-drawer-${i}" type="number" min="0" data-act="have" data-i="${i}" value="${have(i)}" aria-label="How many I have"><button type="button" data-act="inc" data-i="${i}" aria-label="More">+</button></span><span class="small muted">${need?`${esc(curSet().name)} needs ${need.q}`:''}</span><span class="spacer"></span><a class="btn sm" href="${BASE}items#item-${i}" target="_blank" rel="noopener">Open on wiki ↗</a></div>
     <div class="row"><span class="small muted">Carry</span><span class="have"><button type="button" data-act="vq" data-d="-1" aria-label="Less">−</button><input readonly class="${(v.q||1)>=(o.mx||99)?'qty-max':''}" value="${v.q||1}" aria-label="Quantity"><button type="button" data-act="vq" data-d="1" aria-label="More"${(v.q||1)>=(o.mx||99)?' disabled':''}>+</button></span><span class="small muted">max ${o.mx??'—'} in a bag</span>${addToSet(v)}</div></div>`);
   const crafts=craftsWith(i);
   if(crafts.length||o.cf) parts.push(`<div class="src"><h3>Crafts</h3>${crafts.length?`<div class="small muted">Combinations that use ${esc(o.n)}</div><div class="lines" style="padding:0">`+crafts.map(c=>`<div class="line"><span class="chips">${c.ing.map(x=>x===i?`<span class="chip"><b>${esc(items[x].n)}</b></span>`:`<button type="button" class="chip" data-act="item" data-i="${x}">${dot(items[x].r)}${esc(items[x].n)}</button>`).join('<span class="muted">+</span>')}<span class="muted">=</span><button type="button" class="chip" data-act="item" data-i="${c.k}">${dot(items[c.k].r)}<b>${esc(items[c.k].n)}</b> <span class="q">×${esc(c.q)}</span></button></span><span class="pct">${c.p}%</span></div>`).join('')+'</div>':`<span class="muted small">${esc(o.n)} is not an ingredient in any combination.</span>`}</div>`);
