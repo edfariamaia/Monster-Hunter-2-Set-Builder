@@ -379,7 +379,7 @@ function sanitizeState(){
   if(!['1','2','3','4','5','6','7','max'].includes(S.cmpLv))S.cmpLv='max';
   if(!['sets','bags','search','compare'].includes(S.tab))S.tab='sets';
   const sr=isObj(S.search)?S.search:{};
-  S.search={type:['all','w','a','d','i'].includes(sr.type)?sr.type:'all',wc:typeof sr.wc==='string'?sr.wc:'all',ac:['all',...CATS].includes(sr.ac)?sr.ac:'all',q:typeof sr.q==='string'?sr.q.slice(0,60):'',skill:typeof sr.skill==='string'&&skills[sr.skill]?sr.skill:'',el:typeof sr.el==='string'&&WELEMS.includes(sr.el)?sr.el:'all',collapsed:isObj(sr.collapsed)?sr.collapsed:{}};
+  S.search={type:['all','w','a','d','i'].includes(sr.type)?sr.type:'all',wc:typeof sr.wc==='string'?sr.wc:'all',ac:['all',...CATS].includes(sr.ac)?sr.ac:'all',q:typeof sr.q==='string'?sr.q.slice(0,60):'',skill:typeof sr.skill==='string'&&skills[sr.skill]?sr.skill:'',skill2:typeof sr.skill2==='string'&&skills[sr.skill2]?sr.skill2:'',slots:['all','0','1','2','3'].includes(sr.slots)?sr.slots:'all',el:typeof sr.el==='string'&&WELEMS.includes(sr.el)?sr.el:'all',collapsed:isObj(sr.collapsed)?sr.collapsed:{}};
   if(!isObj(S.target))S.target=null;
   S.onlyMissing=!!S.onlyMissing;
   if(!S.sets.find(s=>s.id===S.cur))S.cur=S.sets[0].id;
@@ -393,6 +393,7 @@ const curSet=()=>S.sets.find(s=>s.id===S.cur)||S.sets[0];
 const curBag=()=>S.bags.find(b=>b.id===S.curBag)||S.bags[0];
 
 /* ---------- materials logic ---------- */
+const maxSlots=a=>a.sl&&a.sl.length?Math.max(...a.sl):0;
 const maxLv=a=>a.def&&a.def.length?a.def.length:(a.lv&&a.lv.length?Math.max(1,...a.lv.map(x=>x[0])):1);
 function weaponModes(i){const w=weapons[i],m=[];if(w.f)m.push('f');if(w.u&&w.from!=null)m.push('u');if(w.from!=null)m.push('path');return m;}
 function defaultWMode(i){const w=weapons[i];return (w.u&&w.from!=null)?'from:'+w.from:'f';}
@@ -545,7 +546,7 @@ function refKind(r){const [k,i]=r;return k==='w'?weapons[i].c:k==='a'?SLOT_LABEL
 function refR(r){return SRC[r[0]][r[1]].r;}
 const openAct={w:'open-w',a:'open-a',d:'open-d',i:'item'};
 const kindLine=(k,i)=>{
-  if(k==='a'){const a=armor[i];return [SLOT_LABEL[a.c],a.hc,a.sex,'Rarity '+a.r].filter(Boolean).join(' · ');}
+  if(k==='a'){const a=armor[i],n=maxSlots(a);return [SLOT_LABEL[a.c],a.hc,a.sex,'Rarity '+a.r,n?'◯'.repeat(n):'no slots'].filter(Boolean).join(' · ');}
   if(k==='w'){const w=weapons[i],x=w.s||{};return [w.c,'Rarity '+w.r,x.el?x.el+' '+(x.ev||''):''].filter(Boolean).join(' · ');}
   if(k==='d'){const d=decos[i];return 'Decoration · '+d.sl+' slot'+(d.sl>1?'s':'');}
   return 'Item · Rarity '+items[i].r;
@@ -914,8 +915,12 @@ function renderSearch(){
     const el=s.el||'all';
     sub+=`<div class="row"><span class="small muted">Element / status</span><div class="subtabs" role="group" aria-label="Element or status">${WELEMS.map(v=>`<button type="button" data-act="wel" data-v="${v}" aria-pressed="${el===v}"${v!=='all'&&v!=='none'?` class="el-${v.toLowerCase()}"`:''}>${v==='all'?'Any':v==='none'?'No element':v}</button>`).join('')}</div></div>`;}
   if(s.type==='a') sub=`<div class="subtabs" role="group" aria-label="Armor part">${[['all','All armor'],...CATS.map(c=>[c,SLOT_LABEL[c]])].map(([v,l])=>`<button type="button" data-act="ac" data-v="${v}" aria-pressed="${s.ac===v}">${l}</button>`).join('')}</div>`;
+  if(s.type==='a'){const sv=s.slots||'all';
+    sub+=`<div class="row"><span class="small muted">Slots (at max level)</span><div class="subtabs" role="group" aria-label="Decoration slots">${[['all','Any'],['0','None'],['1','◯'],['2','◯◯'],['3','◯◯◯']].map(([v,l])=>`<button type="button" data-act="aslots" data-v="${v}" aria-pressed="${sv===v}"${v!=='all'&&v!=='0'?` aria-label="${v} slot${v==='1'?'':'s'}"`:''}>${l}</button>`).join('')}</div></div>`;}
   if(s.type==='a'||s.type==='d'){const trees=Object.keys(skills).sort();
-    sub+=`<div class="row"><label class="small muted" for="skill-filter">Skill</label><select id="skill-filter" data-act="skill-filter"><option value="">Any skill</option>${trees.map(t=>`<option value="${esc(t)}"${s.skill===t?' selected':''}>${esc(t)}</option>`).join('')}</select>${s.skill?`<span class="small muted">Pieces with positive ${esc(s.skill)} points, highest first.</span><button type="button" class="btn ghost sm" data-act="skill-clear">Clear</button>`:''}</div>`;}
+    const sel=(id,act,val,other,ph)=>`<select id="${id}" data-act="${act}"><option value="">${ph}</option>${trees.filter(t=>t!==other).map(t=>`<option value="${esc(t)}"${val===t?' selected':''}>${esc(t)}</option>`).join('')}</select>`;
+    const both=[s.skill,s.skill2].filter(Boolean);
+    sub+=`<div class="row"><label class="small muted" for="skill-filter">Skills</label>${sel('skill-filter','skill-filter',s.skill,s.skill2,'Any skill')}${s.skill||s.skill2?`<span class="small muted">+</span>${sel('skill-filter2','skill-filter2',s.skill2,s.skill,'Second skill (optional)')}`:''}${both.length?`<button type="button" class="btn ghost sm" data-act="skill-clear">Clear</button><span class="small muted">Pieces with positive ${both.map(esc).join(' and ')} points, best first.</span>`:''}</div>`;}
   const T=S.target;const tgt=T&&(T.kind==='bag'?S.bags.find(x=>x.id===T.bag):S.sets.find(x=>x.id===T.set));
   return `<div class="searchlayout">${miniSet()}<section class="stack">
     ${tgt?`<div class="note row">Choosing <b>${esc(T.label)}</b> for <b>${esc(tgt.name)}</b>. Open an entry and use <b>◂ Add to ${T.kind==='bag'?'bag':'set'}</b>.<span class="spacer"></span><button type="button" class="btn ghost sm" data-act="target-clear">Dismiss</button></div>`:''}
@@ -932,14 +937,16 @@ function renderResults(){
   if(s.type==='all'&&q.length<2){box.innerHTML=`<p class="muted">Type at least 2 letters to search everything, or pick a category above to browse it. Try ${['Rathalos','Kirin','Machalite Ore','Wyvern Gem','Lao-Shan'].map(x=>`<button type="button" class="chip" data-act="quick" data-v="${x}">${x}</button>`).join(' ')}</p>`;return;}
   if(!INDEX)buildIndex();
   const terms=q.split(/\s+/).filter(Boolean);
+  const SKF=[s.skill,s.skill2].filter(Boolean);
   const hits=INDEX.filter(e=>{
     if(s.type!=='all'&&e.k!==s.type)return false;
     if(e.k==='w'&&s.type==='w'&&s.wc!=='all'&&weapons[e.i].c!==s.wc)return false;
     if(e.k==='w'&&s.type==='w'&&s.el&&s.el!=='all'){const el=(weapons[e.i].s||{}).el||'';if(s.el==='none'?el!=='':el!==s.el)return false;}
     if(e.k==='a'&&s.type==='a'&&s.ac!=='all'&&armor[e.i].c!==s.ac)return false;
-    if(s.skill&&(s.type==='a'||s.type==='d')&&!(skPts(e.k,e.i,s.skill)>0))return false;
+    if(e.k==='a'&&s.type==='a'&&s.slots&&s.slots!=='all'&&maxSlots(armor[e.i])!==+s.slots)return false;
+    if((s.type==='a'||s.type==='d')&&SKF.some(t=>!(skPts(e.k,e.i,t)>0)))return false;
     return terms.every(t=>e.key.includes(t));});
-  if(s.skill&&(s.type==='a'||s.type==='d'))hits.sort((a,b)=>skPts(b.k,b.i,s.skill)-skPts(a.k,a.i,s.skill));
+  if(SKF.length&&(s.type==='a'||s.type==='d')){const sum=e=>SKF.reduce((n,t)=>n+skPts(e.k,e.i,t),0);hits.sort((a,b)=>sum(b)-sum(a));}
   if(s.type==='w'){
     if(!S.search.collapsed)S.search.collapsed={};
     const groups=new Map();
@@ -951,7 +958,7 @@ function renderResults(){
     return;
   }
   const shown=hits.slice(0,showLimit);
-  const skTag=e=>s.skill&&(e.k==='a'||e.k==='d')?` · ${s.skill} ${sgn(skPts(e.k,e.i,s.skill))}`:'';
+  const skTag=e=>SKF.length&&(e.k==='a'||e.k==='d')?SKF.map(t=>` · ${t} ${sgn(skPts(e.k,e.i,t))}`).join(''):'';
   box.innerHTML=`<p class="small muted">${hits.length} result${hits.length===1?'':'s'}</p><div class="cards">`+shown.map(e=>`<button type="button" class="card" data-act="${openAct[e.k]}" data-i="${e.i}">${dot(refR([e.k,e.i]))}<span class="t"><b>${esc(refName([e.k,e.i]))}</b><span class="kind">${esc(kindLine(e.k,e.i)+skTag(e))}</span></span></button>`).join('')+'</div>'+(hits.length>showLimit?`<div class="row" style="margin-top:12px"><button type="button" class="btn" data-act="more">Show ${Math.min(300,hits.length-showLimit)} more</button><span class="small muted">${hits.length-showLimit} not shown</span></div>`:'');
 }
 
@@ -1169,7 +1176,8 @@ function onClick(t,act,d){
     case 'ac':S.search.ac=d.v;showLimit=150;save();render();break;
     case 'cls':S.search.cls=d.v;showLimit=150;save();render();break;
     case 'more':showLimit+=300;renderResults();break;
-    case 'skill-clear':S.search.skill='';save();render();break;
+    case 'skill-clear':S.search.skill='';S.search.skill2='';save();render();break;
+    case 'aslots':S.search.slots=d.v;showLimit=150;save();render();break;
     case 'wgroup':{if(!S.search.collapsed)S.search.collapsed={};const k=d.g;if(S.search.collapsed[k])delete S.search.collapsed[k];else S.search.collapsed[k]=1;save();renderResults();break;}
     case 'wgroup-all':{if(!S.search.collapsed)S.search.collapsed={};if(d.v==='1'){document.querySelectorAll('[data-act="wgroup"]').forEach(b=>S.search.collapsed[b.dataset.g]=1);}else S.search.collapsed={};save();renderResults();break;}
     case 'quick':S.search.q=d.v;$('#q').value=d.v;save();renderResults();break;
@@ -1213,7 +1221,8 @@ document.addEventListener('change',e=>{
     else g.end=+t.value===g.i?undefined:+t.value;
     if(d.scope==='dv')renderDrawer();else{save();render();}}
   else if(d.act==='sm-set'){S.cur=+t.value;save();render();renderDrawer();}
-  else if(d.act==='skill-filter'){S.search.skill=t.value;showLimit=150;save();render();}
+  else if(d.act==='skill-filter'){S.search.skill=t.value;if(!t.value&&S.search.skill2){S.search.skill=S.search.skill2;S.search.skill2='';}showLimit=150;save();render();}
+  else if(d.act==='skill-filter2'){S.search.skill2=t.value;showLimit=150;save();render();}
   else if(d.act==='dv-path'){stack[stack.length-1].path=t.checked;renderDrawer();}
   else if(d.act==='have'){setHave(+d.i,t.value);render();}
   else if(d.act==='only-missing'){S.onlyMissing=t.checked;save();render();}
