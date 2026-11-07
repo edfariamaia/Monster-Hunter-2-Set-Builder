@@ -89,6 +89,10 @@ input[type=text],input[type=search]{padding:8px 12px;border-radius:9px;border:1p
 .setbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 .settab{border:1px solid var(--line);background:var(--panel);border-radius:10px;padding:6px 14px;font-weight:600}
 .settab[aria-pressed="true"]{border-color:var(--accent);box-shadow:inset 0 -3px 0 var(--accent)}
+.gotbtn[aria-pressed="true"]{background:var(--ok);border-color:var(--ok);color:var(--panel)}
+.panel.slot.got{box-shadow:inset 3px 0 0 var(--ok)}
+.gotmark{color:var(--ok);font-weight:700}
+.gotnote{margin:6px 0 0}
 .settab.new{border-style:dashed;color:var(--muted);font-weight:500}
 .newset{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 /* slot + result cards share one shape */
@@ -318,7 +322,7 @@ const ELEMS=['Fire','Water','Thunder','Ice','Dragon'];
 const SHARP=['red','orange','yellow','green','blue','white','purple'];
 const AMMO={normal:'Normal',pierce:'Pierce',pellet:'Pellet',crag:'Crag',clust:'Clust',flame:'Flame',water:'Water',thunder:'Thunder',freeze:'Freeze',dragon:'Dragon',recover:'Recover',poison:'Poison',para:'Para',sleep:'Sleep',demon:'Demon',armor:'Armor'};
 const NOTE={white:'#f2f2f2',purple:'#9c4fd6',red:'#d23b2f',blue:'#3d7fd8',green:'#4caf50',yellow:'#e6d02e',cyan:'#41bfc6',orange:'#e8862a'};
-const MAX_SETS=5;
+const MAX_SETS=10,MAX_BAGS=5;
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmt=n=>Number(n||0).toLocaleString('en-US');
@@ -351,9 +355,9 @@ function sanitizeState(){
   const cleanSlot=(sl,g)=>{
     if(!isObj(g)||!Number.isInteger(g.i))return null;
     if(sl==='Weapon'){if(!isIdx(g.i,weapons))return null;
-      const o={i:g.i};if(typeof g.mode==='string')o.mode=g.mode;if(Number.isInteger(+g.end)&&isIdx(+g.end,weapons))o.end=+g.end;return o;}
+      const o={i:g.i};if(typeof g.mode==='string')o.mode=g.mode;if(Number.isInteger(+g.end)&&isIdx(+g.end,weapons))o.end=+g.end;if(g.got)o.got=true;return o;}
     if(!isIdx(g.i,armor)||armor[g.i].c!==sl)return null;
-    const mx=maxLvA(armor[g.i]);const cur=int(g.cur,0,mx,0);return {i:g.i,cur,to:Math.max(cur,int(g.to,1,mx,1)),path:!!g.path};
+    const mx=maxLvA(armor[g.i]);const cur=int(g.cur,0,mx,0);const o={i:g.i,cur,to:Math.max(cur,int(g.to,1,mx,1)),path:!!g.path};if(g.got)o.got=true;return o;
   };
   let sets=Array.isArray(S.sets)?S.sets.filter(isObj):[];const ids=new Set();
   sets=sets.slice(0,MAX_SETS).map((o,k)=>{let id=Number.isInteger(o.id)&&!ids.has(o.id)?o.id:null;if(id==null){id=1;while(ids.has(id))id++;}ids.add(id);
@@ -367,7 +371,7 @@ function sanitizeState(){
   S.sets.forEach(x=>{if(!x._hadHave&&Object.keys(legacy).length)x.have={...legacy};delete x._hadHave;});
   delete S.have;
   const bids=new Set();
-  let bags=Array.isArray(S.bags)?S.bags.filter(isObj).slice(0,MAX_SETS):[];
+  let bags=Array.isArray(S.bags)?S.bags.filter(isObj).slice(0,MAX_BAGS):[];
   bags=bags.map((o,k)=>{let id=Number.isInteger(o.id)&&!bids.has(o.id)?o.id:null;if(id==null){id=1;while(bids.has(id))id++;}bids.add(id);
     const b=blankBag(id,typeof o.name==='string'&&o.name.trim()?o.name.slice(0,30):'Bag '+(k+1));
     if(Array.isArray(o.slots))for(let k2=0;k2<BAG_SIZE;k2++){const x=o.slots[k2];if(isObj(x)&&isIdx(x.i,items)&&items[x.i].mx!==0)b.slots[k2]={i:x.i,q:int(x.q,1,items[x.i].mx||99,1)};}
@@ -447,7 +451,7 @@ function armorSteps(i,cur,to,path,depth){
   return st;
 }
 function goalSteps(g){
-  if(!g||g.i==null) return [];
+  if(!g||g.i==null||g.got) return [];
   if(g.k==='w') return weaponSteps(g.i,g.mode||defaultWMode(g.i),g.end);
   if(g.k==='a') return armorSteps(g.i,g.cur||0,Math.max(g.to||1,g.cur||0),!!g.path);
   if(g.k==='d'){const d=decos[g.i],q=g.q||1;return [{label:'Forge '+d.n+(q>1?' ×'+q:''),mats:d.f.map(([i,n])=>[i,n*q]),z:d.p*q}];}
@@ -633,7 +637,7 @@ function armorControls(scope,id,g){
   for(let l=1;l<=mx;l++){const dis=l<Math.max(cur,1);seg+=`<button type="button" data-act="lv" data-scope="${scope}" data-id="${id}" data-lv="${l}" aria-pressed="${l===to}" class="${l<to&&l>=Math.max(cur,1)?'inrange':''}"${dis?' disabled':''}>Lv${l}</button>`;}
   const pathCtl=a.from!=null?`<label class="ctl small"><input type="checkbox" id="path-${scope}-${id}" data-act="path" data-scope="${scope}" data-id="${id}"${g.path?' checked':''}${cur>0?' disabled':''}> Include base piece (${esc(armor[a.from].n)} to Lv${a.bl||1})</label>`:'';
   return `<div class="ctls">
-    <div class="ctl"><label for="cur-${scope}-${id}">Owned</label><select id="cur-${scope}-${id}" data-act="cur" data-scope="${scope}" data-id="${id}">${opts}</select></div>
+    ${g.got?'':`<div class="ctl"><label for="cur-${scope}-${id}">Owned</label><select id="cur-${scope}-${id}" data-act="cur" data-scope="${scope}" data-id="${id}">${opts}</select></div>`}
     <div class="ctl"><span class="lab">Target</span><div class="seg" role="group" aria-label="Target level">${seg}</div></div>
     ${pathCtl}</div>`;
 }
@@ -654,13 +658,13 @@ function slotCard(set,sl){
   if(!g) return `<button type="button" class="card add" data-act="goto-slot" data-slot="${sl}"><span class="plus">+</span><span class="kind">${SLOT_LABEL[sl]}</span></button>`;
   if(sl==='Weapon'){
     const w=weapons[g.i],ms=weaponStarts(g.i).length>1?[1]:[];
-    return `<div class="panel slot"><div class="slot-head">${dot(w.r)}<div class="t"><button type="button" data-act="open-w" data-i="${g.i}">${esc(w.n)}</button><span class="kind">Weapon · ${esc(w.c)}${wEnd(g.i,g.end)!==g.i?' · stats for '+esc(weapons[wEnd(g.i,g.end)].n):''}</span></div>${pips(set,sl)}<button type="button" class="btn ghost sm" data-act="slot-remove" data-slot="${sl}">Remove</button></div>
+    return `<div class="panel slot${g.got?' got':''}"><div class="slot-head">${dot(w.r)}<div class="t"><button type="button" data-act="open-w" data-i="${g.i}">${esc(w.n)}</button><span class="kind">Weapon · ${esc(w.c)}${wEnd(g.i,g.end)!==g.i?' · stats for '+esc(weapons[wEnd(g.i,g.end)].n):''}</span></div>${pips(set,sl)}<button type="button" class="btn sm gotbtn" data-act="slot-got" data-slot="${sl}" aria-pressed="${!!g.got}" title="Mark that you already have this piece: its materials stop counting">${g.got?'✓ I have it':'I have it?'}</button><button type="button" class="btn ghost sm" data-act="slot-remove" data-slot="${sl}">Remove</button></div>
       ${ms.length?`<div class="ctls">${startSelect('set','Weapon',g.i,g.mode)}${endSelect('set','Weapon',g.i,g.mode,g.end)}</div>`:''}
-      ${chips(aggregate([Object.assign({k:'w'},g)]).rows.map(r=>[r.i,r.q]))}</div>`;
+      ${g.got?'<p class="small muted gotnote">You already have this weapon, so its materials are left out of the totals.</p>':chips(aggregate([Object.assign({k:'w'},g)]).rows.map(r=>[r.i,r.q]))}</div>`;
   }
   const a=armor[g.i],open=!!set.open[sl];
-  return `<div class="panel slot"><div class="slot-head">${dot(a.r)}<div class="t"><button type="button" data-act="open-a" data-i="${g.i}">${esc(a.n)}</button><span class="kind">${SLOT_LABEL[sl]}${a.sex?' · '+a.sex:''}</span></div>${pips(set,sl)}<button type="button" class="btn ghost sm" data-act="slot-remove" data-slot="${sl}">Remove</button></div>
-    ${armorControls('set',sl,g)}
+  return `<div class="panel slot${g.got?' got':''}"><div class="slot-head">${dot(a.r)}<div class="t"><button type="button" data-act="open-a" data-i="${g.i}">${esc(a.n)}</button><span class="kind">${SLOT_LABEL[sl]}${a.sex?' · '+a.sex:''}</span></div>${pips(set,sl)}<button type="button" class="btn sm gotbtn" data-act="slot-got" data-slot="${sl}" aria-pressed="${!!g.got}" title="Mark that you already have this piece: its materials stop counting">${g.got?'✓ I have it':'I have it?'}</button><button type="button" class="btn ghost sm" data-act="slot-remove" data-slot="${sl}">Remove</button></div>
+    ${g.got?'<p class="small muted gotnote">You already have this piece, so its materials are left out of the totals. The target level still sets its defense and slots.</p>':''}${armorControls('set',sl,g)}
     <button type="button" class="ext-toggle" data-act="slot-open" data-slot="${sl}" aria-expanded="${open}">${open?'▾ Hide levels':'▸ Show levels and materials'} (max Lv${maxLv(a)})</button>${open?levelTable('set',sl,g):''}</div>`;
 }
 /* numbers behind the set stats, reused by "Try in set" */
@@ -750,7 +754,7 @@ function setStats(set){
 function renderSets(){
   const set=curSet();
   const tabs=S.sets.map(s=>`<button type="button" class="settab" data-act="set-pick" data-id="${s.id}" aria-pressed="${s.id===set.id}">${esc(s.name)}</button>`).join('');
-  const newBtn=S.sets.length<MAX_SETS?(S.newSet?`<form class="newset" data-form="newset"><input type="text" id="newset-name" maxlength="30" placeholder="Name the new set" aria-label="New set name" required><button type="submit" class="btn primary">Create set</button><button type="button" class="btn ghost" data-act="newset-cancel">Cancel</button></form>`:`<button type="button" class="settab new" data-act="newset">+ New set</button>`):`<span class="small muted">5 of 5 sets</span>`;
+  const newBtn=S.sets.length<MAX_SETS?(S.newSet?`<form class="newset" data-form="newset"><input type="text" id="newset-name" maxlength="30" placeholder="Name the new set" aria-label="New set name" required><button type="submit" class="btn primary">Create set</button><button type="button" class="btn ghost" data-act="newset-cancel">Cancel</button></form>`:`<button type="button" class="settab new" data-act="newset">+ New set</button>`):`<span class="small muted">${MAX_SETS} of ${MAX_SETS} sets</span>`;
   const lay=decoLayout(set);
   const rows=SLOTS.filter(p=>lay.L[p].n>0).map(p=>{
     const P=lay.L[p];let cells='';
@@ -845,7 +849,7 @@ function renderCompare(){
 function renderBags(){
   const bag=curBag();
   const tabs=S.bags.map(b=>`<button type="button" class="settab" data-act="bag-pick" data-id="${b.id}" aria-pressed="${b.id===bag.id}">${esc(b.name)}</button>`).join('');
-  const newBtn=S.bags.length<MAX_SETS?(S.newBag?`<form class="newset" data-form="newbag"><input type="text" id="newbag-name" maxlength="30" placeholder="Name the new bag" aria-label="New bag name" required><button type="submit" class="btn primary">Create bag</button><button type="button" class="btn ghost" data-act="newbag-cancel">Cancel</button></form>`:`<button type="button" class="settab new" data-act="newbag">+ New bag</button>`):`<span class="small muted">5 of 5 bags</span>`;
+  const newBtn=S.bags.length<MAX_BAGS?(S.newBag?`<form class="newset" data-form="newbag"><input type="text" id="newbag-name" maxlength="30" placeholder="Name the new bag" aria-label="New bag name" required><button type="submit" class="btn primary">Create bag</button><button type="button" class="btn ghost" data-act="newbag-cancel">Cancel</button></form>`:`<button type="button" class="settab new" data-act="newbag">+ New bag</button>`):`<span class="small muted">5 of 5 bags</span>`;
   const used=bag.slots.filter(Boolean).length;
   const cells=bag.slots.map((x,k)=>{
     if(!x) return `<button type="button" class="card add" data-act="goto-bag" data-pos="${k}" aria-label="Add item to space ${k+1}"><span class="plus">+</span><span class="kind">Space ${k+1}</span></button>`;
@@ -885,7 +889,7 @@ function miniSet(){
     if(!g) return `<div class="mrow"><span class="lab">${SLOT_LABEL[p]}</span><span class="empty">empty</span><span></span></div>`;
     const isW=p==='Weapon',x=isW?weapons[wEnd(g.i,g.end)]:armor[g.i];
     const P=lay.L[p];let dc='';for(let c=0;c<P.n;c++){const v=P.cells[c];if(v===null)dc+='<span class="dchip free">◯</span>';else if(v>=0)dc+=`<span class="dchip">${esc(decos[set.decos[v].i].n)}</span>`;}
-    return `<div class="mrow"><span class="lab">${SLOT_LABEL[p]}</span><button type="button" class="nm" data-act="open-${isW?'w':'a'}" data-i="${isW?wEnd(g.i,g.end):g.i}">${dot(x.r)} ${esc(x.n)}</button><span class="lv">${isW?'':'Lv'+Math.max(g.to||1,g.cur||0)}</span>${dc?`<div class="mdecos">${dc}</div>`:''}</div>`;}).join('');
+    return `<div class="mrow"><span class="lab">${SLOT_LABEL[p]}</span><button type="button" class="nm" data-act="open-${isW?'w':'a'}" data-i="${isW?wEnd(g.i,g.end):g.i}">${dot(x.r)} ${esc(x.n)}</button><span class="lv">${g.got?'<span class="gotmark" title="You have it">✓</span> ':''}${isW?'':'Lv'+Math.max(g.to||1,g.cur||0)}</span>${dc?`<div class="mdecos">${dc}</div>`:''}</div>`;}).join('');
   const acts=Object.values(st.act);
   // decorations socketed in this set, grouped by jewel
   const byJ=new Map();lay.fit.forEach(x=>{const e=byJ.get(x.i)||{n:0,pieces:[]};e.n++;e.pieces.push(SLOT_LABEL[x.p]);byJ.set(x.i,e);});
@@ -1104,7 +1108,7 @@ document.addEventListener('submit',e=>{
   const f=e.target.dataset.form;if(!f)return;e.preventDefault();
   if(f==='newset'){const name=$('#newset-name').value.trim();if(!name||S.sets.length>=MAX_SETS)return;const id=Math.max(...S.sets.map(s=>s.id))+1;S.sets.push(blankSet(id,name));S.cur=id;S.newSet=false;save();render();}
   else if(f==='rename'){const name=$('#rename-name').value.trim();if(name){curSet().name=name;save();}render();}
-  else if(f==='newbag'){const name=$('#newbag-name').value.trim();if(!name||S.bags.length>=MAX_SETS)return;const id=Math.max(...S.bags.map(s=>s.id))+1;S.bags.push(blankBag(id,name));S.curBag=id;S.newBag=false;save();render();}
+  else if(f==='newbag'){const name=$('#newbag-name').value.trim();if(!name||S.bags.length>=MAX_BAGS)return;const id=Math.max(...S.bags.map(s=>s.id))+1;S.bags.push(blankBag(id,name));S.curBag=id;S.newBag=false;save();render();}
   else if(f==='bag-rename'){const name=$('#bag-rename-name').value.trim();if(name){curBag().name=name;save();}render();}
 });
 document.addEventListener('click',e=>{
@@ -1154,6 +1158,7 @@ function onClick(t,act,d){
     case 'goto-deco':gotoSearch('d',null,'a decoration for '+SLOT_LABEL[d.piece]+' slot '+(+d.pos+1),{kind:'deco',set:S.cur,piece:d.piece,pos:+d.pos});break;
     case 'goto-bag':gotoSearch('i',null,'an item for space '+(+d.pos+1),{kind:'bag',bag:S.curBag,pos:+d.pos});break;
     case 'target-clear':S.target=null;save();render();break;
+    case 'slot-got':{const g=set.slots[d.slot];if(g){if(g.got)delete g.got;else g.got=true;save();render();}break;}
     case 'slot-remove':set.slots[d.slot]=null;dropDecos(set,d.slot);save();render();break;
     case 'deco-remove':set.decos.splice(+d.k,1);save();render();break;
     case 'bag-pick':S.curBag=+d.id;save();render();break;
