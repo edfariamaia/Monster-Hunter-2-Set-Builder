@@ -1,3 +1,4 @@
+<meta charset="utf-8">
 <title>Monster Hunter 2 Set Builder</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -93,6 +94,8 @@ input[type=text],input[type=search]{padding:8px 12px;border-radius:9px;border:1p
 .panel.slot.got{box-shadow:inset 3px 0 0 var(--ok)}
 .gotmark{color:var(--ok);font-weight:700}
 .gotnote{margin:6px 0 0}
+.sharebox{margin:8px 0;display:grid;gap:8px}.sharebox input{flex:1;min-width:0;font:inherit;font-size:.85rem;padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink)}
+.gotopt{display:flex;align-items:center;gap:6px;width:100%;margin-bottom:2px}
 .settab.new{border-style:dashed;color:var(--muted);font-weight:500}
 .newset{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 /* slot + result cards share one shape */
@@ -396,7 +399,7 @@ function sanitizeState(){
   S.onlyMissing=!!S.onlyMissing;
   if(!S.sets.find(s=>s.id===S.cur))S.cur=S.sets[0].id;
   if(!S.bags.find(b=>b.id===S.curBag))S.curBag=S.bags[0].id;
-  S.newSet=false;S.newBag=false;
+  S.newSet=false;S.newBag=false;S.shareOpen=false;
   if(refCount(S)<r0)DROPPED++;
 }
 try{sanitizeState();}catch(e){S={tab:'sets',sets:[blankSet(1,'Set 1')],cur:1,bags:[blankBag(1,'Bag 1')],curBag:1,have:{},onlyMissing:false,search:{type:'all',wc:'all',ac:'all',q:''},compare:{w:[],a:[]},cmpKind:'w',cmpLv:'max',target:null,newSet:false,newBag:false};DROPPED++;}
@@ -781,7 +784,8 @@ function renderSets(){
   const agg=aggregate(setGoals(set));
   return `<section class="stack">
     <div class="setbar">${tabs}${newBtn}</div>
-    <div class="row"><h2 id="set-title">${esc(set.name)}</h2><span id="set-actions" class="row"><button type="button" class="btn ghost sm" data-act="rename">Rename</button>${S.sets.length>1?`<button type="button" class="btn ghost sm danger" data-act="del-set">Delete set</button>`:''}<button type="button" class="btn ghost sm" data-act="clear-set">Clear</button></span></div>
+    <div class="row"><h2 id="set-title">${esc(set.name)}</h2><span id="set-actions" class="row"><button type="button" class="btn ghost sm" data-act="rename">Rename</button>${S.sets.length>1?`<button type="button" class="btn ghost sm danger" data-act="del-set">Delete set</button>`:''}<button type="button" class="btn ghost sm" data-act="clear-set">Clear</button><button type="button" class="btn sm" data-act="share-set" aria-expanded="${!!S.shareOpen}">Share set</button></span></div>
+    ${S.shareOpen?sharePanel(set):''}
     <div class="slots">${SLOTS.map(sl=>slotCard(set,sl)).join('')}</div>
     ${decoSection}
   </section>
@@ -1011,12 +1015,46 @@ function renderDrawer(){
   try{body.innerHTML=v.t==='item'?itemView(v):equipView(v);}catch(err){body.innerHTML=`<p class="muted">This entry could not be shown (${esc(String(err&&err.message||err)).slice(0,120)}).</p>`;}
   body.scrollTop=keep;v._r=true;
 }
+const SHARE_BASE='https://edfariamaia.github.io/Monster-Hunter-2-Set-Builder/';
+/* A shared set travels in the link itself: name, pieces, levels and decorations. Owned marks and item counts stay private. */
+function shareCode(set){
+  const sl={};for(const [k,g] of Object.entries(set.slots||{})){if(!g)continue;const o={i:g.i};if(k==='Weapon'){if(g.mode)o.mode=g.mode;if(g.end!=null)o.end=g.end;}else{o.to=g.to||1;if(g.path)o.path=1;}sl[k]=o;}
+  const bytes=new TextEncoder().encode(JSON.stringify({v:1,n:set.name,s:sl,d:set.decos||[]}));
+  let bin='';bytes.forEach(b=>bin+=String.fromCharCode(b));
+  return btoa(bin).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+}
+function decodeShare(code){
+  const bin=atob(code.replace(/-/g,'+').replace(/_/g,'/'));
+  return JSON.parse(new TextDecoder().decode(Uint8Array.from(bin,c=>c.charCodeAt(0))));
+}
+function sharePanel(set){
+  const url=SHARE_BASE+'#set='+shareCode(set);
+  return `<div class="panel sharebox"><label class="small muted" for="share-url">Send this link to a friend. Opening it adds <b>${esc(set.name)}</b> to their sets.</label>
+    <div class="row"><input id="share-url" type="text" readonly value="${esc(url)}"><button type="button" class="btn primary sm" data-act="share-copy">Copy link</button><span id="share-msg" class="small muted"></span></div>
+    <div class="small muted">Your "I have it" marks and item counts are not included.</div></div>`;
+}
+function notice(msg){const n=document.createElement('div');n.className='note';n.style.cssText='position:fixed;left:50%;bottom:calc(16px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);z-index:60;max-width:min(560px,calc(100% - 32px));box-shadow:var(--shadow)';n.textContent=msg;document.body.appendChild(n);setTimeout(()=>n.remove(),7000);}
+function importShared(){
+  const m=/[#&]set=([A-Za-z0-9_-]+)/.exec(location.hash||'');if(!m)return;
+  try{history.replaceState(null,'',location.pathname+location.search);}catch(e){}
+  let data;try{data=decodeShare(m[1]);}catch(e){notice('That shared set link is broken or incomplete.');return;}
+  if(S.sets.length>=MAX_SETS){notice(`You already have ${MAX_SETS} sets. Delete one, then open the link again.`);return;}
+  const id=Math.max(0,...S.sets.map(x=>x.id))+1;
+  let name=String(data.n||'Shared set').slice(0,30);if(S.sets.some(x=>x.name===name))name=(name.slice(0,22)+' (shared)');
+  const set=blankSet(id,name);set.slots=data.s&&typeof data.s==='object'?data.s:{};set.decos=Array.isArray(data.d)?data.d:[];
+  S.sets.push(set);const before=DROPPED;sanitizeState();
+  const got=S.sets.find(x=>x.id===id);
+  if(!got){DROPPED=before;notice('That shared set could not be read.');return;}
+  S.cur=id;S.tab='sets';DROPPED=before;save();
+  notice(`Added "${got.name}" from a shared link.`);
+}
 function addToSet(v){
   const isBag=v.t==='item';const list=isBag?S.bags:S.sets;const T=S.target;
   const mark=id=>T&&(isBag?(T.kind==='bag'&&T.bag===id):(T.kind!=='bag'&&T.set===id));
   const opts=list.map(s=>`<button type="button" class="btn sm" data-act="add-to" data-id="${s.id}">${esc(s.name)}${mark(s.id)?' ★':''}</button>`).join('');
   const dis=isBag&&!(items[v.i].mx>0);
-  return `<div class="addset"><button type="button" class="btn primary" data-act="addset-toggle" aria-expanded="${!!v.addOpen}"${dis?' disabled title="This item cannot be carried"':''}>${v.addOpen?'▾':'◂'} Add to ${isBag?'bag':'set'}</button>${v.addOpen?`<div class="opts">${opts}</div>`:''}<span id="added-msg" class="small muted"></span></div>`;
+  const gotOpt=(v.t==='w'||v.t==='a')?`<label class="small gotopt"><input type="checkbox" data-act="add-got"${v.addGot?' checked':''}> I already have it</label>`:'';
+  return `<div class="addset"><button type="button" class="btn primary" data-act="addset-toggle" aria-expanded="${!!v.addOpen}"${dis?' disabled title="This item cannot be carried"':''}>${v.addOpen?'▾':'◂'} Add to ${isBag?'bag':'set'}</button>${v.addOpen?`<div class="opts">${gotOpt}${opts}</div>`:''}<span id="added-msg" class="small muted"></span></div>`;
 }
 function craftsWith(i){
   const out=[],seen=new Set();
@@ -1160,6 +1198,10 @@ function onClick(t,act,d){
     case 'set-pick':S.cur=+d.id;save();render();break;
     case 'newset':S.newSet=true;render();setTimeout(()=>{const x=$('#newset-name');if(x)x.focus();},0);break;
     case 'newset-cancel':S.newSet=false;render();break;
+    case 'share-set':S.shareOpen=!S.shareOpen;render();if(S.shareOpen){const x=$('#share-url');if(x){x.focus();x.select();}}break;
+    case 'share-copy':{const x=$('#share-url'),m=$('#share-msg');x.select();
+      const done=()=>{if(m)m.textContent='Copied';},fail=()=>{try{document.execCommand('copy');done();}catch(e){if(m)m.textContent='Select the link and copy it';}};
+      if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(x.value).then(done,fail);else fail();break;}
     case 'rename':$('#set-title').outerHTML=`<form class="newset" data-form="rename"><input type="text" id="rename-name" maxlength="30" value="${esc(set.name)}" aria-label="Set name" required><button type="submit" class="btn primary sm">Save</button><button type="button" class="btn ghost sm" data-act="cancel">Cancel</button></form>`;$('#set-actions').hidden=true;$('#rename-name').focus();break;
     case 'del-set':$('#set-actions').innerHTML=`<span class="confirm"><span class="small">Delete “${esc(set.name)}”?</span><button type="button" class="btn danger sm" data-act="del-set-yes">Delete</button><button type="button" class="btn ghost sm" data-act="cancel">Cancel</button></span>`;break;
     case 'del-set-yes':S.sets=S.sets.filter(s=>s.id!==set.id);S.cur=S.sets[0].id;save();render();break;
@@ -1220,8 +1262,8 @@ function onClick(t,act,d){
       }else{
         const target=S.sets.find(s=>s.id===+d.id);if(!target)break;
         fromTarget=!!(T&&T.kind!=='bag'&&T.set===target.id);
-        if(v.t==='w'){const had=target.slots.Weapon;if(had&&had.i!==v.i)dropDecos(target,'Weapon');target.slots.Weapon={i:v.i,mode:v.mode&&weaponChain(v.i).length>1?v.mode:defaultWMode(v.i),end:v.end!=null?+v.end:undefined};msg=(had?'Replaced the weapon in ':'Added to ')+target.name;}
-        else if(v.t==='a'){const c=armor[v.i].c;const had=target.slots[c];if(had&&had.i!==v.i)dropDecos(target,c);target.slots[c]={i:v.i,cur:0,to:v.lv||1,path:!!v.path};msg=(had?'Replaced '+SLOT_LABEL[c].toLowerCase()+' in ':'Added to ')+target.name;}
+        if(v.t==='w'){const had=target.slots.Weapon;if(had&&had.i!==v.i)dropDecos(target,'Weapon');target.slots.Weapon={i:v.i,mode:v.mode&&weaponChain(v.i).length>1?v.mode:defaultWMode(v.i),end:v.end!=null?+v.end:undefined};if(v.addGot)target.slots.Weapon.got=true;msg=(had?'Replaced the weapon in ':'Added to ')+target.name+(v.addGot?' as owned':'');}
+        else if(v.t==='a'){const c=armor[v.i].c;const had=target.slots[c];if(had&&had.i!==v.i)dropDecos(target,c);target.slots[c]={i:v.i,cur:0,to:v.lv||1,path:!!v.path};if(v.addGot)target.slots[c].got=true;msg=(had?'Replaced '+SLOT_LABEL[c].toLowerCase()+' in ':'Added to ')+target.name+(v.addGot?' as owned':'');}
         else{const useT=fromTarget&&T.kind==='deco';const pc=placeDeco(target,v.i,useT?T.piece:null,useT?T.pos:null);
           if(!pc){ok=false;msg=useT?`Not enough free slots in ${SLOT_LABEL[T.piece]} for a ${decos[v.i].sl}-slot jewel`:`No free ${decos[v.i].sl}-slot space in ${target.name}`;}
           else msg='Socketed into '+SLOT_LABEL[pc]+' in '+target.name;}
@@ -1244,6 +1286,7 @@ document.addEventListener('change',e=>{
     if(d.scope==='dv')renderDrawer();else{save();render();}}
   else if(d.act==='sm-set'){S.cur=+t.value;save();render();renderDrawer();}
   else if(d.act==='skill-filter'){S.search.skill=t.value;if(!t.value&&S.search.skill2){S.search.skill=S.search.skill2;S.search.skill2='';}showLimit=150;save();render();}
+  else if(d.act==='add-got'){const v=stack[stack.length-1];if(v){v.addGot=t.checked;}}
   else if(d.act==='skill-filter2'){S.search.skill2=t.value;showLimit=150;save();render();}
   else if(d.act==='dv-path'){stack[stack.length-1].path=t.checked;renderDrawer();}
   else if(d.act==='have'){setHave(+d.i,t.value);render();}
@@ -1259,6 +1302,7 @@ document.addEventListener('input',e=>{
   else if(t.dataset.act==='have'){setHave(+t.dataset.i,t.value);}
 });
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&stack.length)closeDrawer();});
+try{importShared();}catch(e){}
 render();
 if(DROPPED){save();const n=document.createElement('div');n.className='note';n.style.cssText='position:fixed;left:50%;bottom:calc(16px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);z-index:60;max-width:min(560px,calc(100% - 32px));box-shadow:var(--shadow)';
   n.textContent='Some saved entries no longer matched the game data and were removed. Everything else was kept.';document.body.appendChild(n);setTimeout(()=>n.remove(),7000);}
