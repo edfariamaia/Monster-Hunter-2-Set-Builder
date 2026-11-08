@@ -346,6 +346,10 @@ const bgClass=()=>/Bowgun/.test(S.search.wc||'');
 const pickedEls=()=>bgClass()?(S.search.elm||[]):(S.search.el&&S.search.el!=='all'?[S.search.el]:[]);
 /* elemental/status ammo levels a bowgun can load, '-' entries dropped */
 const ammoFor=(w,el)=>{const a=((w.s||{}).ammo||{})[AMMO_KEY[el]];return Array.isArray(a)?a.filter(x=>x!=='-'):[];};
+const SHOT_TYPES=[['normal','Normal'],['pierce','Pierce'],['pellet','Pellet'],['crag','Crag'],['clust','Clust'],['recover','Recover'],['demon','Demon'],['armor','Armor']];
+/* capacity of one ammo type: per level, null when it can't be loaded (or needs a skill and those are hidden) */
+const shotCaps=(w,k,withSkill)=>{const a=((w.s||{}).ammo||{})[k];return Array.isArray(a)?a.map(x=>x==='-'?null:/^\(/.test(String(x))?(withSkill?parseInt(String(x).slice(1),10)||0:null):+x):[];};
+function shotMatch(w,s){const c=shotCaps(w,s.ammo,s.ammoSkill);if(s.ammoLv&&s.ammoLv!=='all'){const v=c[+s.ammoLv-1];return v!=null?v:-1;}const v=c.filter(x=>x!=null);return v.length?v.reduce((a,b)=>a+b,0):-1;}
 const hasElemAmmo=w=>Object.keys(AMMO_KEY).some(el=>ammoFor(w,el).length);
 const WCLASSES=['Great Sword','Longsword','Sword and Shield','Dual Blades','Hammer','Hunting Horn','Lance','Gunlance','Light Bowgun','Heavy Bowgun','Bow'];
 const RANK={LR:'Village / Low Rank',HR:'High Rank',Dojo:'Dojo'};
@@ -421,7 +425,7 @@ function sanitizeState(){
   if(!['1','2','3','4','5','6','7','max'].includes(S.cmpLv))S.cmpLv='max';
   if(!['sets','bags','search','compare'].includes(S.tab))S.tab='sets';
   const sr=isObj(S.search)?S.search:{};
-  S.search={type:['all','w','a','d','i'].includes(sr.type)?sr.type:'all',wc:sr.wc==='Dual Swords'?'Dual Blades':WCLASSES.includes(sr.wc)?sr.wc:'all',ac:['all',...CATS].includes(sr.ac)?sr.ac:'all',q:typeof sr.q==='string'?sr.q.slice(0,60):'',skill:typeof sr.skill==='string'&&skills[sr.skill]?sr.skill:'',skill2:typeof sr.skill2==='string'&&skills[sr.skill2]?sr.skill2:'',slots:['all','0','1','2','3'].includes(sr.slots)?sr.slots:'all',el:typeof sr.el==='string'&&WELEMS.includes(sr.el)?sr.el:'all',elm:Array.isArray(sr.elm)?[...new Set(sr.elm.filter(v=>WELEMS.includes(v)&&v!=='all'))].slice(0,8):[],collapsed:isObj(sr.collapsed)?sr.collapsed:{},fOpen:!!sr.fOpen,sort:RES_SORTS.some(x=>x[0]===sr.sort)?sr.sort:'default'};
+  S.search={type:['all','w','a','d','i'].includes(sr.type)?sr.type:'all',wc:sr.wc==='Dual Swords'?'Dual Blades':WCLASSES.includes(sr.wc)?sr.wc:'all',ac:['all',...CATS].includes(sr.ac)?sr.ac:'all',q:typeof sr.q==='string'?sr.q.slice(0,60):'',skill:typeof sr.skill==='string'&&skills[sr.skill]?sr.skill:'',skill2:typeof sr.skill2==='string'&&skills[sr.skill2]?sr.skill2:'',slots:['all','0','1','2','3'].includes(sr.slots)?sr.slots:'all',el:typeof sr.el==='string'&&WELEMS.includes(sr.el)?sr.el:'all',elm:Array.isArray(sr.elm)?[...new Set(sr.elm.filter(v=>WELEMS.includes(v)&&v!=='all'))].slice(0,8):[],collapsed:isObj(sr.collapsed)?sr.collapsed:{},fOpen:!!sr.fOpen,ammo:SHOT_TYPES.some(x=>x[0]===sr.ammo)?sr.ammo:'',ammoLv:['all','1','2','3'].includes(sr.ammoLv)?sr.ammoLv:'all',ammoSkill:!!sr.ammoSkill,sort:RES_SORTS.some(x=>x[0]===sr.sort)?sr.sort:'default'};
   if(!isObj(S.target))S.target=null;
   S.onlyMissing=!!S.onlyMissing;
   if(!MAT_SORTS.some(x=>x[0]===S.matSort))S.matSort='need-desc';
@@ -640,7 +644,8 @@ const openAct={w:'open-w',a:'open-a',d:'open-d',i:'item'};
 const kindLine=(k,i)=>{
   if(k==='a'){const a=armor[i],n=maxSlots(a);return [SLOT_LABEL[a.c],a.hc,a.sex,'Rarity '+a.r,n?'◯'.repeat(n):'no slots'].filter(Boolean).join(' · ');}
   if(k==='w'){const w=weapons[i],x=w.s||{};let am='';
-    if(isBowgun(w)&&S.search.type==='w')am=pickedEls().filter(f=>f!=='none'&&ammoFor(w,f).length).map(f=>{const v=ammoFor(w,f),raw=((w.s||{}).ammo||{})[AMMO_KEY[f]];return f+' ammo '+raw.map(x=>x==='-'?'–':x).join('/')+(v.every(x=>/^\(/.test(String(x)))?' (needs Shot Add skill)':'');}).join(' · ');
+    const sh=S.search.type==='w'&&S.search.ammo&&isBowgun(w)?((w.s||{}).ammo||{})[S.search.ammo]:null;
+    if(isBowgun(w)&&S.search.type==='w')am=(sh?[SHOT_TYPES.find(x=>x[0]===S.search.ammo)[1]+' '+sh.map(x=>x==='-'?'–':x).join('/')]:[]).concat(pickedEls().filter(f=>f!=='none'&&ammoFor(w,f).length).map(f=>{const v=ammoFor(w,f),raw=((w.s||{}).ammo||{})[AMMO_KEY[f]];return f+' ammo '+raw.map(x=>x==='-'?'–':x).join('/')+(v.every(x=>/^\(/.test(String(x)))?' (needs Shot Add skill)':'');})).join(' · ');
     return [w.c,'Rarity '+w.r,x.el?x.el+' '+(x.ev||''):'',am].filter(Boolean).join(' · ');}
   if(k==='d'){const d=decos[i];return 'Decoration · '+d.sl+' slot'+(d.sl>1?'s':'');}
   return 'Item · Rarity '+items[i].r;
@@ -1038,6 +1043,9 @@ function renderSearch(){
   if(s.type==='w'){sub=`<div class="subtabs" role="group" aria-label="Weapon type">${[['all','All weapons'],...WCLASSES.map(c=>[c,c])].map(([v,l])=>`<button type="button" data-act="wc" data-v="${v}" aria-pressed="${s.wc===v}">${l}</button>`).join('')}</div>`;
     const pk=pickedEls(),multi=bgClass();
     if(pk.length)on.push(...pk.map(v=>v==='none'?'No element':v));
+    if(multi){const am=s.ammo,levels=am?((weapons.find(w=>isBowgun(w))||{}).s||{}).ammo?.[am]?.length||3:3;
+      if(am)on.push(SHOT_TYPES.find(x=>x[0]===am)[1]+(s.ammoLv!=='all'?' Lv'+s.ammoLv:'')+' ammo');
+      flt+=`<div class="row"><label class="small muted" for="ammo-type">Ammo type</label><select id="ammo-type" data-act="ammo-type"><option value="">Any</option>${SHOT_TYPES.map(([v,l])=>`<option value="${v}"${am===v?' selected':''}>${l}</option>`).join('')}</select>${am&&levels>1?`<div class="subtabs" role="group" aria-label="Ammo level">${[['all','Any level'],...Array.from({length:levels},(_,j)=>[String(j+1),'Lv'+(j+1)])].map(([v,l])=>`<button type="button" data-act="ammo-lv" data-v="${v}" aria-pressed="${(s.ammoLv||'all')===v}">${l}</button>`).join('')}</div>`:''}${am?`<label class="small"><input type="checkbox" data-act="ammo-skill"${s.ammoSkill?' checked':''}> Count ammo that needs a skill, shown as (n)</label><span class="small muted">Most rounds first.</span>`:''}</div>`;}
     flt+=`<div class="row"><span class="small muted">${multi?'Ammo element / status (pick several)':'Element / status'}</span><div class="subtabs" role="group" aria-label="Element or status">${WELEMS.map(v=>`<button type="button" data-act="wel" data-v="${v}" aria-pressed="${v==='all'?!pk.length:pk.includes(v)}"${v!=='all'&&v!=='none'?` class="el-${v.toLowerCase()}"`:''}>${v==='all'?'Any':v==='none'?'No element':v}</button>`).join('')}</div>${multi&&pk.length>1&&!pk.includes('none')?'<span class="small muted">Bowguns that load all of these.</span>':''}</div>`;}
   if(s.type==='a') sub=`<div class="subtabs" role="group" aria-label="Armor part">${[['all','All armor'],...CATS.map(c=>[c,SLOT_LABEL[c]])].map(([v,l])=>`<button type="button" data-act="ac" data-v="${v}" aria-pressed="${s.ac===v}">${l}</button>`).join('')}</div>`;
   if(s.type==='a'){const sv=s.slots||'all';if(sv!=='all')on.push(sv==='0'?'No slots':sv+' slot'+(sv==='1'?'':'s'));
@@ -1070,13 +1078,15 @@ function renderResults(){
     if(e.k==='w'&&s.type==='w'&&PK.length){const w=weapons[e.i];
       if(isBowgun(w)){if(PK[0]==='none'?hasElemAmmo(w):PK.some(v=>!ammoFor(w,v).length))return false;}
       else{const el=(w.s||{}).el||'';if(PK[0]==='none'?el!=='':el!==PK[0])return false;}}
+    if(e.k==='w'&&s.type==='w'&&s.ammo&&bgClass()&&(!isBowgun(weapons[e.i])||shotMatch(weapons[e.i],s)<0))return false;
     if(e.k==='a'&&s.type==='a'&&s.ac!=='all'&&armor[e.i].c!==s.ac)return false;
     if(e.k==='a'&&s.type==='a'&&s.slots&&s.slots!=='all'&&maxSlots(armor[e.i])!==+s.slots)return false;
     if((s.type==='a'||s.type==='d')&&SKF.some(t=>!(skPts(e.k,e.i,t)>0)))return false;
     return terms.every(t=>e.key.includes(t));});
   if(SKF.length&&(s.type==='a'||s.type==='d')){const sum=e=>SKF.reduce((n,t)=>n+skPts(e.k,e.i,t),0);hits.sort((a,b)=>sum(b)-sum(a));}
-  const so=s.type!=='all'&&s.sort&&s.sort!=='default'?s.sort:'';
-  if(so){const R=e=>+refR([e.k,e.i])||0,N=e=>(SRC[e.k][e.i]||{}).n||'';
+  let so=s.type!=='all'&&s.sort&&s.sort!=='default'?s.sort:'';
+  if(!so&&s.type==='w'&&s.ammo&&bgClass()){so='ammo';hits.sort((a,b)=>shotMatch(weapons[b.i],s)-shotMatch(weapons[a.i],s)||weapons[b.i].r-weapons[a.i].r);}
+  if(so&&so!=='ammo'){const R=e=>+refR([e.k,e.i])||0,N=e=>(SRC[e.k][e.i]||{}).n||'';
     hits.sort(so==='name'?(a,b)=>N(a).localeCompare(N(b)):so==='rar-desc'?(a,b)=>R(b)-R(a)||N(a).localeCompare(N(b)):(a,b)=>R(a)-R(b)||N(a).localeCompare(N(b)));}
   const sortSel=s.type==='all'?'':`<label class="small ctl" for="res-sort">Sort<select id="res-sort" data-act="res-sort">${RES_SORTS.map(([v,l])=>`<option value="${v}"${(s.sort||'default')===v?' selected':''}>${v==='default'&&s.type==='w'?'Grouped by tree':l}</option>`).join('')}</select></label>`;
   if(s.type==='w'&&!so){
@@ -1359,7 +1369,8 @@ function onClick(t,act,d){
     case 'cls':S.search.cls=d.v;showLimit=150;save();render();break;
     case 'more':showLimit+=300;renderResults();break;
     case 'skill-clear':S.search.skill='';S.search.skill2='';save();render();break;
-    case 'filters-clear':{const sr=S.search;sr.el='all';sr.elm=[];sr.slots='all';sr.skill='';sr.skill2='';showLimit=150;save();render();break;}
+    case 'filters-clear':{const sr=S.search;sr.el='all';sr.elm=[];sr.slots='all';sr.ammo='';sr.ammoLv='all';sr.skill='';sr.skill2='';showLimit=150;save();render();break;}
+    case 'ammo-lv':S.search.ammoLv=d.v;showLimit=150;save();render();break;
     case 'aslots':S.search.slots=d.v;showLimit=150;save();render();break;
     case 'wgroup':{if(!S.search.collapsed)S.search.collapsed={};const k=d.g;if(S.search.collapsed[k])delete S.search.collapsed[k];else S.search.collapsed[k]=1;save();renderResults();break;}
     case 'wgroup-all':{if(!S.search.collapsed)S.search.collapsed={};if(d.v==='1'){document.querySelectorAll('[data-act="wgroup"]').forEach(b=>S.search.collapsed[b.dataset.g]=1);}else S.search.collapsed={};save();renderResults();break;}
@@ -1414,6 +1425,8 @@ document.addEventListener('change',e=>{
   else if(d.act==='have'){setHave(+d.i,t.value);render();}
   else if(d.act==='mv-from'||d.act==='mv-to'){const set=curSet(),V=viewSteps(set).all.find(x=>x.key===d.k);if(!V)return;const n=V.steps.length,r=set.mv.r[d.k]||[0,n-1];
     if(d.act==='mv-from'){r[0]=+t.value;if(r[1]<r[0])r[1]=r[0];}else r[1]=Math.max(+t.value,r[0]);set.mv.r[d.k]=r;save();render();}
+  else if(d.act==='ammo-type'){S.search.ammo=t.value;S.search.ammoLv='all';showLimit=150;save();render();}
+  else if(d.act==='ammo-skill'){S.search.ammoSkill=t.checked;showLimit=150;save();render();}
   else if(d.act==='res-sort'){S.search.sort=t.value;showLimit=150;save();renderResults();}
   else if(d.act==='mat-sort'){S.matSort=t.value;save();render();}
   else if(d.act==='only-missing'){S.onlyMissing=t.checked;save();render();}
