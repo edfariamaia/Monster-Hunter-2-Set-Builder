@@ -110,6 +110,9 @@ details.filters{border:1px solid var(--line);border-radius:10px;background:var(-
 details.filters>summary{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:8px 12px;cursor:pointer;font-weight:600}
 details.filters>summary .fon{font-weight:500;color:var(--accent)}
 details.filters .fbody{display:grid;gap:10px;padding:4px 12px 12px}
+.mvpick{display:grid;gap:8px;margin:0 0 12px}
+.mvrange{padding:6px 10px;border:1px solid var(--line);border-radius:8px;background:var(--sunk)}
+.mvrange select{max-width:min(320px,100%)}
 .settab.new{border-style:dashed;color:var(--muted);font-weight:500}
 .newset{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 /* slot + result cards share one shape */
@@ -332,6 +335,8 @@ const BASE='https://wiki.mholdschool.com/mh2/';
 const CATS=['Headgear','Torso','Arms','Waist','Legs'];
 const SLOTS=['Weapon',...CATS];
 const MAX_CMP=4;
+const RES_SORTS=[['default','Default order'],['rar-desc','Rarity: high to low'],['rar-asc','Rarity: low to high'],['name','Name A–Z']];
+const MAT_SORTS=[['need-desc','Most needed first'],['need-asc','Fewest needed first'],['left-desc','Most left to gather'],['rar-desc','Rarity: high to low'],['rar-asc','Rarity: low to high'],['name','Name A–Z']];
 const SLOT_LABEL={Weapon:'Weapon',Headgear:'Head',Torso:'Torso',Arms:'Arms',Waist:'Waist',Legs:'Legs'};
 const WELEMS=['all','Fire','Water','Thunder','Ice','Dragon','Poison','Paralysis','Sleep','none'];
 const AMMO_KEY={Fire:'flame',Water:'water',Thunder:'thunder',Ice:'freeze',Dragon:'dragon',Poison:'poison',Paralysis:'para',Sleep:'sleep'};
@@ -360,7 +365,7 @@ const SH_MAX=Math.max(...weapons.filter(w=>w.s&&w.s.sh).map(w=>Math.max(...w.s.s
 /* ---------- state ---------- */
 const KEY='mhdos-item-counter-v3';
 const BAG_SIZE=20;
-const blankSet=(id,name)=>({id,name,slots:{Weapon:null,Headgear:null,Torso:null,Arms:null,Waist:null,Legs:null},decos:[],open:{},have:{}});
+const blankSet=(id,name)=>({id,name,slots:{Weapon:null,Headgear:null,Torso:null,Arms:null,Waist:null,Legs:null},decos:[],open:{},have:{},mv:{p:[],r:{}}});
 const blankBag=(id,name)=>({id,name,slots:Array(BAG_SIZE).fill(null)});
 let S={tab:'sets',sets:[blankSet(1,'Set 1')],cur:1,bags:[blankBag(1,'Bag 1')],curBag:1,have:{},onlyMissing:false,search:{type:'all',wc:'all',ac:'all',q:''},compare:{w:[],a:[]},cmpKind:'w',cmpLv:'max',target:null,newSet:false,newBag:false};
 let OLD=null;
@@ -383,14 +388,19 @@ function sanitizeState(){
     if(sl==='Weapon'){if(!isIdx(g.i,weapons))return null;
       const o={i:g.i};if(typeof g.mode==='string')o.mode=g.mode;if(Number.isInteger(+g.end)&&isIdx(+g.end,weapons))o.end=+g.end;if(g.got)o.got=true;return o;}
     if(!isIdx(g.i,armor)||armor[g.i].c!==sl)return null;
-    const mx=maxLvA(armor[g.i]);const cur=int(g.cur,0,mx,0);const to=Math.max(cur,int(g.to,1,mx,1));const o={i:g.i,cur:g.got?to:cur,to,path:!!g.path&&!g.got};return o;
+    const mx=maxLvA(armor[g.i]);const cur=int(g.cur,0,mx,0);const to=Math.max(cur,int(g.to,1,mx,1));const o={i:g.i,cur:g.got?to:cur,to,path:false};
+    if(o.cur<1){const ch=armorChain(g.i);
+      if(isObj(g.base)&&ch.indexOf(+g.base.i)>=0&&ch.indexOf(+g.base.i)<ch.length-1){const bi=+g.base.i;o.base={i:bi,lv:int(g.base.lv,0,maxLvA(armor[bi]),0)};if(o.base.lv===0&&bi!==ch[0])o.base.lv=1;}
+      else if(g.path&&ch.length>1)o.base={i:ch[0],lv:0};}
+    return o;
   };
   let sets=Array.isArray(S.sets)?S.sets.filter(isObj):[];const ids=new Set();
   sets=sets.slice(0,MAX_SETS).map((o,k)=>{let id=Number.isInteger(o.id)&&!ids.has(o.id)?o.id:null;if(id==null){id=1;while(ids.has(id))id++;}ids.add(id);
     const s=blankSet(id,typeof o.name==='string'&&o.name.trim()?o.name.slice(0,30):'Set '+(k+1));
     if(isObj(o.slots))SLOTS.forEach(sl=>s.slots[sl]=cleanSlot(sl,o.slots[sl]));
     s.decos=(Array.isArray(o.decos)?o.decos:[]).filter(x=>isObj(x)&&SLOTS.includes(x.p)&&Number.isInteger(x.pos)&&x.pos>=0&&x.pos<3&&isIdx(x.i,decos)&&s.slots[x.p]).map(x=>({p:x.p,pos:x.pos,i:x.i}));
-    s.open=isObj(o.open)?o.open:{};s.have=cleanHave(o.have);s._hadHave=isObj(o.have);return s;});
+    s.open=isObj(o.open)?o.open:{};
+    {const mv=isObj(o.mv)?o.mv:{};const P=[...SLOTS,'Decorations'];s.mv={p:Array.isArray(mv.p)?[...new Set(mv.p.filter(x=>P.includes(x)))]:[],r:{}};if(isObj(mv.r))for(const [k,v] of Object.entries(mv.r))if(P.includes(k)&&Array.isArray(v)&&v.length===2)s.mv.r[k]=[int(v[0],0,99,0),int(v[1],0,99,0)];}s.have=cleanHave(o.have);s._hadHave=isObj(o.have);return s;});
   S.sets=sets.length?sets:[blankSet(1,'Set 1')];
   // Older saves kept one shared "I have" list; give each existing set its own copy of it.
   const legacy=cleanHave(S.have);
@@ -406,13 +416,14 @@ function sanitizeState(){
   const cmp=isObj(S.compare)?S.compare:{};
   S.compare={w:[...new Set((Array.isArray(cmp.w)?cmp.w:[]).filter(i=>isIdx(i,weapons)))].slice(0,4),a:(()=>{const seen={};return [...new Set((Array.isArray(cmp.a)?cmp.a:[]).filter(i=>isIdx(i,armor)))].filter(i=>{const c=armor[i].c;seen[c]=(seen[c]||0)+1;return seen[c]<=MAX_CMP;});})()};
   if(S.cmpKind==='a'){const f=S.compare.a[0];S.cmpKind=f!=null?armor[f].c:'Headgear';}
-  if(!['w',...CATS].includes(S.cmpKind))S.cmpKind='w';
+  if(!['w','all',...CATS].includes(S.cmpKind))S.cmpKind='w';
   if(!['1','2','3','4','5','6','7','max'].includes(S.cmpLv))S.cmpLv='max';
   if(!['sets','bags','search','compare'].includes(S.tab))S.tab='sets';
   const sr=isObj(S.search)?S.search:{};
-  S.search={type:['all','w','a','d','i'].includes(sr.type)?sr.type:'all',wc:sr.wc==='Dual Swords'?'Dual Blades':WCLASSES.includes(sr.wc)?sr.wc:'all',ac:['all',...CATS].includes(sr.ac)?sr.ac:'all',q:typeof sr.q==='string'?sr.q.slice(0,60):'',skill:typeof sr.skill==='string'&&skills[sr.skill]?sr.skill:'',skill2:typeof sr.skill2==='string'&&skills[sr.skill2]?sr.skill2:'',slots:['all','0','1','2','3'].includes(sr.slots)?sr.slots:'all',el:typeof sr.el==='string'&&WELEMS.includes(sr.el)?sr.el:'all',elm:Array.isArray(sr.elm)?[...new Set(sr.elm.filter(v=>WELEMS.includes(v)&&v!=='all'))].slice(0,8):[],collapsed:isObj(sr.collapsed)?sr.collapsed:{},fOpen:!!sr.fOpen};
+  S.search={type:['all','w','a','d','i'].includes(sr.type)?sr.type:'all',wc:sr.wc==='Dual Swords'?'Dual Blades':WCLASSES.includes(sr.wc)?sr.wc:'all',ac:['all',...CATS].includes(sr.ac)?sr.ac:'all',q:typeof sr.q==='string'?sr.q.slice(0,60):'',skill:typeof sr.skill==='string'&&skills[sr.skill]?sr.skill:'',skill2:typeof sr.skill2==='string'&&skills[sr.skill2]?sr.skill2:'',slots:['all','0','1','2','3'].includes(sr.slots)?sr.slots:'all',el:typeof sr.el==='string'&&WELEMS.includes(sr.el)?sr.el:'all',elm:Array.isArray(sr.elm)?[...new Set(sr.elm.filter(v=>WELEMS.includes(v)&&v!=='all'))].slice(0,8):[],collapsed:isObj(sr.collapsed)?sr.collapsed:{},fOpen:!!sr.fOpen,sort:RES_SORTS.some(x=>x[0]===sr.sort)?sr.sort:'default'};
   if(!isObj(S.target))S.target=null;
   S.onlyMissing=!!S.onlyMissing;
+  if(!MAT_SORTS.some(x=>x[0]===S.matSort))S.matSort='need-desc';
   if(!S.sets.find(s=>s.id===S.cur))S.cur=S.sets[0].id;
   if(!S.bags.find(b=>b.id===S.curBag))S.curBag=S.bags[0].id;
   S.newSet=false;S.newBag=false;S.shareOpen=false;
@@ -487,10 +498,22 @@ function armorSteps(i,cur,to,path,depth){
   for(const [lv,price,m] of (a.lv||[])){ if(lv>Math.max(cur,1)&&lv<=to) st.push({label:(depth?a.n+' ':'')+'Lv'+(lv-1)+' → Lv'+lv,mats:m,z:price,owner:i,lv}); }
   return st;
 }
+/* armor upgrade chain, oldest first: e.g. Rathalos Helm → Azure Rathalos Helm → Silver Rathalos Helm */
+function armorChain(i){const ch=[i];const seen=new Set([i]);let c=i;while(armor[c].from!=null&&!seen.has(armor[c].from)&&ch.length<8){c=armor[c].from;seen.add(c);ch.unshift(c);}return ch;}
+/* steps from owning chain piece `base.i` at level `base.lv` (0 = not forged yet) up to piece i at level `to` */
+function chainSteps(i,base,to){
+  const ch=armorChain(i),s0=ch.indexOf(base.i);if(s0<0)return armorSteps(i,0,to,false);
+  const st=[];
+  for(let j=s0;j<ch.length;j++){const P=ch[j],last=j===ch.length-1;
+    const start=j===s0?base.lv:0,end=last?to:(armor[ch[j+1]].bl||1);
+    if(start>=end&&start>0)continue;
+    st.push(...armorSteps(P,start,Math.max(end,start||1),false,last?0:1).filter(x=>!(start>0&&x.lv<=start&&x.owner===P)));}
+  return st;
+}
 function goalSteps(g){
   if(!g||g.i==null||g.got) return [];
   if(g.k==='w') return weaponSteps(g.i,g.mode||defaultWMode(g.i),g.end);
-  if(g.k==='a') return armorSteps(g.i,g.cur||0,Math.max(g.to||1,g.cur||0),!!g.path);
+  if(g.k==='a'){if(g.base&&!(g.cur>0))return chainSteps(g.i,g.base,Math.max(g.to||1,1));return armorSteps(g.i,g.cur||0,Math.max(g.to||1,g.cur||0),!!g.path&&!(g.cur>0));}
   if(g.k==='d'){const d=decos[g.i],q=g.q||1;return [{label:'Forge '+d.n+(q>1?' ×'+q:''),mats:d.f.map(([i,n])=>[i,n*q]),z:d.p*q}];}
   if(g.k==='i') return [{label:items[g.i].n,mats:[[g.i,g.q||1]],z:0}];
   return [];
@@ -533,6 +556,33 @@ if(OLD&&OLD.sets){ // carry sets over from the previous version
       else if(x.k==='i'){const b=S.bags[0];const e=b.slots.findIndex(v=>!v);if(e>=0)b.slots[e]={i:x.i,q:Math.min(x.q||1,items[x.i].mx||99)};}});
     return s;});
   S.cur=S.sets[0].id;S.sets.forEach(x=>x.have={...(OLD.have||{})});try{sanitizeState();}catch(e){}save();
+}
+/* steps still to do, grouped by piece, for the Materials picker */
+function pieceSteps(set){
+  const out=[];
+  SLOTS.forEach(sl=>{const g=set.slots[sl];if(!g)return;const k=sl==='Weapon'?'w':'a';
+    out.push({key:sl,name:(k==='w'?weapons[g.i]:armor[g.i]).n,label:SLOT_LABEL[sl],steps:goalSteps(Object.assign({k},g))});});
+  if(set.decos.length){const st=[];set.decos.forEach(x=>st.push(...goalSteps({k:'d',i:x.i,q:1}).map(s=>Object.assign({},s,{label:decos[x.i].n}))));out.push({key:'Decorations',name:'Decorations',label:'Decorations',steps:st});}
+  return out;
+}
+function aggSteps(steps){
+  const m=new Map();let z=0;
+  steps.forEach(s=>{z+=s.z||0;s.mats.forEach(([i,q])=>{if(i>=0)m.set(i,(m.get(i)||0)+q);});});
+  const rows=[...m].map(([i,q])=>({i,q})).sort((a,b)=>b.q-a.q||items[a.i].n.localeCompare(items[b.i].n));
+  return {rows,z};
+}
+/* the slice of steps the Materials view is set to show */
+function viewSteps(set){
+  const mv=set.mv||{p:[],r:{}},all=pieceSteps(set),pick=mv.p.length?all.filter(x=>mv.p.includes(x.key)):all;
+  return {all,pick,steps:pick.flatMap(x=>{const r=mv.r[x.key],n=x.steps.length;if(!r||!n)return x.steps;const a=Math.min(r[0],n-1),b=Math.min(Math.max(r[1],a),n-1);return x.steps.slice(a,b+1);})};
+}
+function matPicker(set){
+  const mv=set.mv,V=viewSteps(set);if(!V.all.length)return '';
+  const chipsRow=`<div class="subtabs" role="group" aria-label="Pieces to show"><button type="button" data-act="mv-all" aria-pressed="${!mv.p.length}">Whole set</button>${V.all.map(x=>`<button type="button" data-act="mv-piece" data-k="${x.key}" aria-pressed="${mv.p.includes(x.key)}" title="${esc(x.name)}">${esc(x.label)}${x.key!=='Decorations'?': '+esc(x.name):''}</button>`).join('')}</div>`;
+  const ranges=mv.p.length?V.pick.filter(x=>x.steps.length>1).map(x=>{const n=x.steps.length,r=mv.r[x.key]||[0,n-1],a=Math.min(r[0],n-1),b=Math.min(Math.max(r[1],a),n-1);
+      const opt=(sel,lo)=>x.steps.map((s,j)=>`<option value="${j}"${j===sel?' selected':''}${j<lo?' disabled':''}>${j+1}. ${esc(s.label)}</option>`).join('');
+      return `<div class="ctls mvrange"><b class="small">${esc(x.label)}</b><div class="ctl"><label for="mvf-${x.key}" class="small muted">from</label><select id="mvf-${x.key}" data-act="mv-from" data-k="${x.key}">${opt(a,0)}</select></div><div class="ctl"><label for="mvt-${x.key}" class="small muted">to</label><select id="mvt-${x.key}" data-act="mv-to" data-k="${x.key}">${opt(b,a)}</select></div>${a>0||b<n-1?`<button type="button" class="btn ghost sm" data-act="mv-reset" data-k="${x.key}">All steps</button>`:''}</div>`;}).join(''):'';
+  return `<div class="mvpick"><span class="small muted">Show materials for</span>${chipsRow}${ranges}${mv.p.length?'':'<span class="small muted">Pick one or more pieces to see only their materials, and the steps you want.</span>'}</div>`;
 }
 function aggregate(goals){
   const m=new Map();let z=0;
@@ -647,10 +697,15 @@ function skillList(sk){
   if(!sk||!sk.length) return '<span class="muted small">No skills</span>';
   return '<div class="chips">'+sk.map(([n,q])=>n==='Torso Up'?`<span class="chip" title="Copies the torso piece's skill points">Torso Up</span>`:`<span class="chip">${esc(n)} <span class="q">${sgn(parseInt(q,10))}</span></span>`).join('')+'</div>';
 }
+function sortMats(rows,mode){
+  const nm=(a,b)=>items[a.i].n.localeCompare(items[b.i].n),rar=r=>+items[r.i].r||0,left=r=>Math.max(0,r.q-have(r.i));
+  const f={'need-asc':(a,b)=>a.q-b.q||nm(a,b),'left-desc':(a,b)=>left(b)-left(a)||b.q-a.q||nm(a,b),'rar-desc':(a,b)=>rar(b)-rar(a)||b.q-a.q||nm(a,b),'rar-asc':(a,b)=>rar(a)-rar(b)||b.q-a.q||nm(a,b),name:nm}[mode];
+  return f?[...rows].sort(f):rows;
+}
 function matTable(agg,scope,onlyMissing){
   let need=0,got=0;
   agg.rows.forEach(r=>{need+=r.q;got+=Math.min(r.q,have(r.i));});
-  const rows=agg.rows.filter(r=>!onlyMissing||have(r.i)<r.q);
+  const rows=sortMats(agg.rows.filter(r=>!onlyMissing||have(r.i)<r.q),scope==='set'?S.matSort:'');
   const pct=need?Math.round(got/need*100):0;
   const head=`<div class="mats-head"><div class="stats">
     <div class="stat"><b>${agg.rows.length}</b><span>materials</span></div>
@@ -669,21 +724,38 @@ function matTable(agg,scope,onlyMissing){
 
 /* ---------- set page ---------- */
 function armorControls(scope,id,g){
-  const a=armor[g.i],mx=maxLv(a),cur=g.cur||0,to=Math.max(g.to||1,cur);
-  let opts='<option value="0"'+(cur===0?' selected':'')+'>Nothing yet</option>';
-  for(let l=1;l<=mx;l++) opts+=`<option value="${l}"${cur===l?' selected':''}>Lv${l}${l===mx?' (max)':''}</option>`;
+  const a=armor[g.i],mx=maxLv(a),cur=g.cur||0,to=Math.max(g.to||1,cur),ch=armorChain(g.i);
+  const B=cur>0?null:(g.base||null);
+  /* value: "c:L" = this piece at level L (0 = nothing / just the upgrade), "b:IDX:L" = an earlier piece of the chain */
+  const selv=cur>0?'c:'+cur:B?`b:${B.i}:${B.lv}`:'c:0';
+  const op=(v,l)=>`<option value="${v}"${v===selv?' selected':''}>${esc(l)}</option>`;
+  let opts='';
+  if(ch.length>1){
+    opts+=op(`b:${ch[0]}:0`,'Nothing yet (forge '+armor[ch[0]].n+')');
+    ch.slice(0,-1).forEach((c,j)=>{const nx=armor[ch[j+1]],need=nx.bl||1,m=maxLv(armor[c]);
+      opts+=`<optgroup label="${esc(armor[c].n)} (Lv${need} to upgrade)">`;
+      for(let l=1;l<=m;l++)opts+=op(j===ch.length-2&&l===need?'c:0':`b:${c}:${l}`,armor[c].n+' Lv'+l+(l>=need?' ✓ ready':''));
+      opts+='</optgroup>';});
+    opts+=`<optgroup label="${esc(a.n)}">`;
+  }else opts+=op('c:0','Nothing yet');
+  for(let l=1;l<=mx;l++) opts+=op('c:'+l,(ch.length>1?a.n+' ':'')+'Lv'+l+(l===mx?' (max)':''));
+  if(ch.length>1)opts+='</optgroup>';
   let seg='';
   for(let l=1;l<=mx;l++){const dis=l<Math.max(cur,1);seg+=`<button type="button" data-act="lv" data-scope="${scope}" data-id="${id}" data-lv="${l}" aria-pressed="${l===to}" class="${l<to&&l>=Math.max(cur,1)?'inrange':''}"${dis?' disabled':''}>Lv${l}</button>`;}
-  const pathCtl=a.from!=null?`<label class="ctl small"><input type="checkbox" id="path-${scope}-${id}" data-act="path" data-scope="${scope}" data-id="${id}"${g.path?' checked':''}${cur>0?' disabled':''}> Include base piece (${esc(armor[a.from].n)} to Lv${a.bl||1})</label>`:'';
+  const pathCtl='';
   return `<div class="ctls">
     <div class="ctl"><label for="cur-${scope}-${id}">I have</label><select id="cur-${scope}-${id}" data-act="cur" data-scope="${scope}" data-id="${id}">${opts}</select></div>
     <div class="ctl"><span class="lab">Goal</span><div class="seg" role="group" aria-label="Goal level">${seg}</div></div>
-    ${cur>=to?'<span class="small donetag">✓ Done: nothing left to forge</span>':''}
+    ${cur>=to&&cur>0?'<span class="small donetag">✓ Done: nothing left to forge</span>':''}
     ${pathCtl}</div>`;
+}
+function weaponStepTable(g){
+  const T=wEnd(g.i,g.end),all=weaponSteps(T,'path'),on=new Set(goalSteps(Object.assign({k:'w'},g)).map(s=>s.label));
+  return '<div class="lvtable">'+all.map(s=>`<div class="lvrow${on.has(s.label)?' on':''}"><div class="lvl">${esc(s.label)}</div>${chips(s.mats)}<div class="z">${fmt(s.z)}z</div></div>`).join('')+'</div>';
 }
 function levelTable(scope,id,g){
   const a=armor[g.i],mx=maxLv(a);
-  const all=armorSteps(g.i,0,mx,!!g.path);
+  const ch=armorChain(g.i),all=ch.length>1?chainSteps(g.i,{i:ch[0],lv:0},mx):armorSteps(g.i,0,mx,false);
   const on=new Set(goalSteps(Object.assign({k:'a'},g)).map(s=>s.label));
   return '<div class="lvtable">'+all.map(s=>{
     const click=s.owner===g.i&&s.lv>1;
@@ -700,10 +772,11 @@ function slotCard(set,sl){
     const w=weapons[g.i];
     return `<div class="panel slot${g.got?' got':''}"><div class="slot-head">${dot(w.r)}<div class="t"><button type="button" data-act="open-w" data-i="${g.i}">${esc(w.n)}</button><span class="kind">Weapon · ${esc(w.c)}${wEnd(g.i,g.end)!==g.i?' · stats for '+esc(weapons[wEnd(g.i,g.end)].n):''}</span></div>${pips(set,sl)}<button type="button" class="btn ghost sm xbtn" data-act="slot-remove" data-slot="${sl}" aria-label="Remove ${esc(SLOT_LABEL[sl].toLowerCase())}" title="Remove from set">✕</button></div>
       ${weaponRoute('set','Weapon',g.i,g,true)}
-      ${g.got?'<span class="small donetag">✓ Done: nothing left to forge</span>':chips(aggregate([Object.assign({k:'w'},g)]).rows.map(r=>[r.i,r.q]))}</div>`;
+      ${g.got?'<span class="small donetag">✓ Done: nothing left to forge</span>':chips(aggregate([Object.assign({k:'w'},g)]).rows.map(r=>[r.i,r.q]))}
+      ${weaponChain(wEnd(g.i,g.end)).length>1||weapons[g.i].f?`<button type="button" class="ext-toggle" data-act="slot-open" data-slot="${sl}" aria-expanded="${!!set.open[sl]}">${set.open[sl]?'▾ Hide steps':'▸ Show each step and its materials'}</button>${set.open[sl]?weaponStepTable(g):''}`:''}</div>`;
   }
   const a=armor[g.i],open=!!set.open[sl];
-  const done=(g.cur||0)>=(g.to||1);
+  const done=(g.cur||0)>=(g.to||1)&&!g.base;
   return `<div class="panel slot${done?' got':''}"><div class="slot-head">${dot(a.r)}<div class="t"><button type="button" data-act="open-a" data-i="${g.i}">${esc(a.n)}</button><span class="kind">${SLOT_LABEL[sl]}${a.sex?' · '+a.sex:''}</span></div>${pips(set,sl)}<button type="button" class="btn ghost sm xbtn" data-act="slot-remove" data-slot="${sl}" aria-label="Remove ${esc(SLOT_LABEL[sl].toLowerCase())}" title="Remove from set">✕</button></div>
     ${armorControls('set',sl,g)}
     <button type="button" class="ext-toggle" data-act="slot-open" data-slot="${sl}" aria-expanded="${open}">${open?'▾ Hide levels':'▸ Show levels and materials'} (max Lv${maxLv(a)})</button>${open?levelTable('set',sl,g):''}</div>`;
@@ -809,7 +882,7 @@ function renderSets(){
   const decoSection=`<div class="row"><h3>Decorations</h3><span class="small muted">${lay.fit.reduce((s,x)=>s+decos[x.i].sl,0)} of ${totalSl} slots used</span></div>
     ${totalSl?`<div class="stack">${rows}</div>`:'<p class="muted small" style="margin:0">No decoration slots yet. Slots come from the weapon and from armor pieces at their target level.</p>'}
     ${over?`<div class="cards">${over}</div>`:''}`;
-  const agg=aggregate(setGoals(set));
+  const agg=aggSteps(viewSteps(set).steps);
   return `<section class="stack">
     <div class="setbar">${tabs}${newBtn}</div>
     <div class="row"><h2 id="set-title">${esc(set.name)}</h2><details id="set-actions" class="menu"><summary class="btn ghost sm" aria-label="Set options" title="Set options">⋯</summary><div class="menu-list" role="menu"><button type="button" role="menuitem" data-act="share-set">Share set</button><button type="button" role="menuitem" data-act="rename">Rename</button><button type="button" role="menuitem" data-act="clear-set">Clear all pieces</button>${S.sets.length>1?`<button type="button" role="menuitem" class="danger" data-act="del-set">Delete set</button>`:''}</div></details></div>
@@ -818,13 +891,13 @@ function renderSets(){
     ${decoSection}
   </section>
   ${setStats(set)}
-  <section class="panel pad"><div class="row" style="margin-bottom:10px"><h2>Materials</h2><span class="spacer"></span><label class="small"><input type="checkbox" id="only-missing" data-act="only-missing"${S.onlyMissing?' checked':''}> Only show what is missing</label></div>${matTable(agg,'set',S.onlyMissing)}</section>`;
+  <section class="panel pad"><div class="row" style="margin-bottom:10px"><h2>Materials</h2><span class="spacer"></span><label class="small ctl" for="mat-sort">Sort<select id="mat-sort" data-act="mat-sort">${MAT_SORTS.map(([v,l])=>`<option value="${v}"${(S.matSort||'need-desc')===v?' selected':''}>${l}</option>`).join('')}</select></label><label class="small"><input type="checkbox" id="only-missing" data-act="only-missing"${S.onlyMissing?' checked':''}> Only show what is missing</label></div>${matPicker(set)}${matTable(agg,'set',S.onlyMissing)}</section>`;
 }
 
 /* ---------- item bag page ---------- */
 /* ---------- compare page ---------- */
 /* compare groups: weapons, then one group per armor piece type */
-const cmpGroup=g=>g==='w'?S.compare.w:S.compare.a.filter(i=>armor[i].c===g);
+const cmpGroup=g=>g==='w'?S.compare.w:g==='all'?S.compare.a:S.compare.a.filter(i=>armor[i].c===g);
 function cmpButton(k,i){
   if(k!=='w'&&k!=='a')return '';
   const g=k==='w'?'w':armor[i].c;
@@ -844,10 +917,10 @@ function cmpRow(label,cells,vals,mode){
 }
 function renderCompare(){
   const G=S.cmpKind,k=G==='w'?'w':'a',list=cmpGroup(G);
-  const what=G==='w'?'weapons':SLOT_LABEL[G].toLowerCase()+' armor';
-  const kinds=[['w','Weapons'],...CATS.map(c=>[c,SLOT_LABEL[c]])];
+  const what=G==='w'?'weapons':G==='all'?'armor':SLOT_LABEL[G].toLowerCase()+' armor';
+  const kinds=[['w','Weapons'],...CATS.map(c=>[c,SLOT_LABEL[c]]),['all','All armor']];
   const head=`<div class="row"><h2>Compare</h2><div class="seg text" role="group" aria-label="Equipment piece">${kinds.map(([v,l])=>`<button type="button" data-act="cmp-kind" data-v="${v}" aria-pressed="${G===v}">${l} (${cmpGroup(v).length})</button>`).join('')}</div><span class="spacer"></span>${list.length?`<button type="button" class="btn ghost sm" data-act="cmp-clear">Clear ${what}</button>`:''}</div>`;
-  if(!list.length) return `<section class="stack">${head}<div class="panel pad"><p style="margin:0 0 6px"><b>No ${what} to compare yet.</b></p><p class="muted" style="margin:0">Open any ${G==='w'?'weapon':SLOT_LABEL[G].toLowerCase()+' piece'} in <b>Search</b> or from a set and press <b>⇄ Compare</b>. Pieces are compared only against the same part, up to ${MAX_CMP} side by side; the best value in each row is highlighted.</p></div><div class="row"><button type="button" class="btn primary" data-act="cmp-browse">Browse ${what}</button></div></section>`;
+  if(!list.length) return `<section class="stack">${head}<div class="panel pad"><p style="margin:0 0 6px"><b>No ${what} to compare yet.</b></p><p class="muted" style="margin:0">Open any ${G==='w'?'weapon':G==='all'?'armor piece':SLOT_LABEL[G].toLowerCase()+' piece'} in <b>Search</b> or from a set and press <b>⇄ Compare</b>. Each part holds up to ${MAX_CMP} pieces; <b>All armor</b> lines up every armor piece you picked, whatever the part. The best value in each row is highlighted.</p></div><div class="row"><button type="button" class="btn primary" data-act="cmp-browse">Browse ${what}</button></div></section>`;
   const cols=list.map(i=>`<th scope="col"><div class="cmphead">${(()=>{const src=k==='w'?weaponImg(weapons[i]):armorImg(armor[i],220);return src?`<img class="thumb" src="${src}" alt="" width="110" height="110" loading="lazy" decoding="async" referrerpolicy="no-referrer" data-fallback="">`:'';})()}${dot(SRC[k][i].r)}<button type="button" class="nm" data-act="open-${k}" data-i="${i}">${esc(SRC[k][i].n)}</button><span class="kind">${esc(kindLine(k,i))}</span><button type="button" class="btn ghost sm" data-act="cmp-remove" data-k="${k}" data-i="${i}" style="justify-self:start">Remove</button></div></th>`).join('');
   const rows=[];
   if(k==='w'){
@@ -888,7 +961,7 @@ function renderCompare(){
   }
   const lvCtl=k==='a'?`<div class="row"><span class="small muted">Compare armor at</span><div class="seg" role="group" aria-label="Armor level">${['1','2','3','4','5','6','7','max'].map(v=>`<button type="button" data-act="cmp-lv" data-v="${v}" aria-pressed="${S.cmpLv===v}">${v==='max'?'Max':'Lv'+v}</button>`).join('')}</div></div>`:'';
   return `<section class="stack">${head}${lvCtl}<div class="panel" style="padding:4px 0"><div class="tablewrap"><table class="cmp"><thead><tr><th></th>${cols}</tr></thead><tbody>${rows.join('')}</tbody></table></div></div>
-    <p class="small muted" style="margin:0">Green marks the best value in a row (lowest for prices and upgrade counts).${list.length<MAX_CMP?` Add up to ${MAX_CMP-list.length} more with ⇄ Compare.`:''}</p></section>`;
+    <p class="small muted" style="margin:0">Green marks the best value in a row (lowest for prices and upgrade counts).${G!=='all'&&list.length<MAX_CMP?` Add up to ${MAX_CMP-list.length} more with ⇄ Compare.`:''}</p></section>`;
 }
 
 function renderBags(){
@@ -934,7 +1007,7 @@ function miniSet(){
     if(!g) return `<div class="mrow"><span class="lab">${SLOT_LABEL[p]}</span><span class="empty">empty</span><span></span></div>`;
     const isW=p==='Weapon',x=isW?weapons[wEnd(g.i,g.end)]:armor[g.i];
     const P=lay.L[p];let dc='';for(let c=0;c<P.n;c++){const v=P.cells[c];if(v===null)dc+='<span class="dchip free">◯</span>';else if(v>=0)dc+=`<span class="dchip">${esc(decos[set.decos[v].i].n)}</span>`;}
-    return `<div class="mrow"><span class="lab">${SLOT_LABEL[p]}</span><button type="button" class="nm" data-act="open-${isW?'w':'a'}" data-i="${isW?wEnd(g.i,g.end):g.i}">${dot(x.r)} ${esc(x.n)}</button><span class="lv">${(isW?g.got:(g.cur||0)>=(g.to||1))?'<span class="gotmark" title="You have it">✓</span> ':''}${isW?'':'Lv'+Math.max(g.to||1,g.cur||0)}</span>${dc?`<div class="mdecos">${dc}</div>`:''}</div>`;}).join('');
+    return `<div class="mrow"><span class="lab">${SLOT_LABEL[p]}</span><button type="button" class="nm" data-act="open-${isW?'w':'a'}" data-i="${isW?wEnd(g.i,g.end):g.i}">${dot(x.r)} ${esc(x.n)}</button><span class="lv">${(isW?g.got:(g.cur||0)>=(g.to||1)&&(g.cur||0)>0)?'<span class="gotmark" title="You have it">✓</span> ':''}${isW?'':'Lv'+Math.max(g.to||1,g.cur||0)}</span>${dc?`<div class="mdecos">${dc}</div>`:''}</div>`;}).join('');
   const acts=Object.values(st.act);
   // decorations socketed in this set, grouped by jewel
   const byJ=new Map();lay.fit.forEach(x=>{const e=byJ.get(x.i)||{n:0,pieces:[]};e.n++;e.pieces.push(SLOT_LABEL[x.p]);byJ.set(x.i,e);});
@@ -1000,19 +1073,23 @@ function renderResults(){
     if((s.type==='a'||s.type==='d')&&SKF.some(t=>!(skPts(e.k,e.i,t)>0)))return false;
     return terms.every(t=>e.key.includes(t));});
   if(SKF.length&&(s.type==='a'||s.type==='d')){const sum=e=>SKF.reduce((n,t)=>n+skPts(e.k,e.i,t),0);hits.sort((a,b)=>sum(b)-sum(a));}
-  if(s.type==='w'){
+  const so=s.type!=='all'&&s.sort&&s.sort!=='default'?s.sort:'';
+  if(so){const R=e=>+refR([e.k,e.i])||0,N=e=>(SRC[e.k][e.i]||{}).n||'';
+    hits.sort(so==='name'?(a,b)=>N(a).localeCompare(N(b)):so==='rar-desc'?(a,b)=>R(b)-R(a)||N(a).localeCompare(N(b)):(a,b)=>R(a)-R(b)||N(a).localeCompare(N(b)));}
+  const sortSel=s.type==='all'?'':`<label class="small ctl" for="res-sort">Sort<select id="res-sort" data-act="res-sort">${RES_SORTS.map(([v,l])=>`<option value="${v}"${(s.sort||'default')===v?' selected':''}>${v==='default'&&s.type==='w'?'Grouped by tree':l}</option>`).join('')}</select></label>`;
+  if(s.type==='w'&&!so){
     if(!S.search.collapsed)S.search.collapsed={};
     const groups=new Map();
     hits.forEach(e=>{const r=wRoot(e.i);const k=weapons[r].c+'|'+r;if(!groups.has(k))groups.set(k,{r,list:[]});groups.get(k).list.push(e);});
     const anyOpen=[...groups.keys()].some(k=>!S.search.collapsed[k]);
-    box.innerHTML=`<div class="row" style="margin-bottom:10px"><span class="small muted">${hits.length} weapon${hits.length===1?'':'s'} in ${groups.size} group${groups.size===1?'':'s'}</span><span class="spacer"></span><button type="button" class="btn sm" data-act="wgroup-all" data-v="${anyOpen?'1':'0'}">${anyOpen?'Collapse all':'Expand all'}</button></div><div class="groups">`+
+    box.innerHTML=`<div class="row" style="margin-bottom:10px"><span class="small muted">${hits.length} weapon${hits.length===1?'':'s'} in ${groups.size} group${groups.size===1?'':'s'}</span><span class="spacer"></span>${sortSel}<button type="button" class="btn sm" data-act="wgroup-all" data-v="${anyOpen?'1':'0'}">${anyOpen?'Collapse all':'Expand all'}</button></div><div class="groups">`+
       [...groups].map(([k,g])=>{const closed=!!S.search.collapsed[k];
         return `<div class="wgroup"><button type="button" class="ghead" data-act="wgroup" data-g="${esc(k)}" aria-expanded="${!closed}"><span class="arr">${closed?'▸':'▾'}</span>${esc(weapons[g.r].n)} group <span class="cnt">${g.list.length}</span>${s.wc==='all'?`<span class="cnt">· ${esc(weapons[g.r].c)}</span>`:''}</button>${closed?'':`<div class="cards">`+g.list.map(e=>`<button type="button" class="card" data-act="open-w" data-i="${e.i}">${dot(weapons[e.i].r)}<span class="t"><b>${esc(weapons[e.i].n)}</b><span class="kind">${esc(kindLine('w',e.i))}</span></span></button>`).join('')+'</div>'}</div>`;}).join('')+'</div>';
     return;
   }
   const shown=hits.slice(0,showLimit);
   const skTag=e=>SKF.length&&(e.k==='a'||e.k==='d')?SKF.map(t=>` · ${t} ${sgn(skPts(e.k,e.i,t))}`).join(''):'';
-  box.innerHTML=`<p class="small muted">${hits.length} result${hits.length===1?'':'s'}</p><div class="cards">`+shown.map(e=>`<button type="button" class="card" data-act="${openAct[e.k]}" data-i="${e.i}">${dot(refR([e.k,e.i]))}<span class="t"><b>${esc(refName([e.k,e.i]))}</b><span class="kind">${esc(kindLine(e.k,e.i)+skTag(e))}</span></span></button>`).join('')+'</div>'+(hits.length>showLimit?`<div class="row" style="margin-top:12px"><button type="button" class="btn" data-act="more">Show ${Math.min(300,hits.length-showLimit)} more</button><span class="small muted">${hits.length-showLimit} not shown</span></div>`:'');
+  box.innerHTML=`<div class="row" style="margin-bottom:10px"><span class="small muted">${hits.length} result${hits.length===1?'':'s'}</span><span class="spacer"></span>${sortSel}</div><div class="cards">`+shown.map(e=>`<button type="button" class="card" data-act="${openAct[e.k]}" data-i="${e.i}">${dot(refR([e.k,e.i]))}<span class="t"><b>${esc(refName([e.k,e.i]))}</b><span class="kind">${esc(kindLine(e.k,e.i)+skTag(e))}</span></span></button>`).join('')+'</div>'+(hits.length>showLimit?`<div class="row" style="margin-top:12px"><button type="button" class="btn" data-act="more">Show ${Math.min(300,hits.length-showLimit)} more</button><span class="small muted">${hits.length-showLimit} not shown</span></div>`:'');
 }
 
 function showCrash(err){
@@ -1051,7 +1128,7 @@ function renderDrawer(){
 const SHARE_BASE='https://edfariamaia.github.io/Monster-Hunter-2-Set-Builder/';
 /* A shared set travels in the link itself: name, pieces, levels and decorations. Owned marks and item counts stay private. */
 function shareCode(set){
-  const sl={};for(const [k,g] of Object.entries(set.slots||{})){if(!g)continue;const o={i:g.i};if(k==='Weapon'){if(g.mode)o.mode=g.mode;if(g.end!=null)o.end=g.end;}else{o.to=g.to||1;if(g.path)o.path=1;}sl[k]=o;}
+  const sl={};for(const [k,g] of Object.entries(set.slots||{})){if(!g)continue;const o={i:g.i};if(k==='Weapon'){if(g.mode)o.mode=g.mode;if(g.end!=null)o.end=g.end;}else{o.to=g.to||1;}sl[k]=o;}
   const bytes=new TextEncoder().encode(JSON.stringify({v:1,n:set.name,s:sl,d:set.decos||[]}));
   let bin='';bytes.forEach(b=>bin+=String.fromCharCode(b));
   return btoa(bin).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
@@ -1208,9 +1285,9 @@ function onClick(t,act,d){
   const set=curSet();const v=stack[stack.length-1];
   switch(act){
     case 'tab':S.tab=d.tab;save();render();window.scrollTo(0,0);break;
-    case 'cmp-toggle':{const k=d.k,i=+d.i,L=S.compare[k],x=L.indexOf(i),g=k==='w'?'w':armor[i].c;if(x>=0)L.splice(x,1);else if(cmpGroup(g).length<MAX_CMP){L.push(i);S.cmpKind=g;}save();render();break;}
+    case 'cmp-toggle':{const k=d.k,i=+d.i,L=S.compare[k],x=L.indexOf(i),g=k==='w'?'w':armor[i].c;if(x>=0)L.splice(x,1);else if(cmpGroup(g).length<MAX_CMP){L.push(i);if(!(S.cmpKind==='all'&&g!=='w'))S.cmpKind=g;}save();render();break;}
     case 'cmp-remove':{const L=S.compare[d.k],x=L.indexOf(+d.i);if(x>=0)L.splice(x,1);save();render();break;}
-    case 'cmp-clear':{const g=S.cmpKind;if(g==='w')S.compare.w=[];else S.compare.a=S.compare.a.filter(i=>armor[i].c!==g);save();render();break;}
+    case 'cmp-clear':{const g=S.cmpKind;if(g==='w')S.compare.w=[];else S.compare.a=g==='all'?[]:S.compare.a.filter(i=>armor[i].c!==g);save();render();break;}
     case 'cmp-kind':S.cmpKind=d.v;save();render();break;
     case 'cmp-lv':S.cmpLv=d.v;save();render();break;
     case 'try-toggle':v.tryOpen=!v.tryOpen;if(v.tryOpen&&v.trySet==null)v.trySet=S.cur;renderDrawer();break;
@@ -1223,7 +1300,7 @@ function onClick(t,act,d){
       if(v.t==='w'){const had=set.slots.Weapon;if(had&&had.i!==v.i)dropDecos(set,'Weapon');set.slots.Weapon={i:v.i,mode:v.mode&&weaponChain(v.i).length>1?v.mode:defaultWMode(v.i),end:v.end!=null?+v.end:undefined};}
       else{const c=armor[v.i].c,had=set.slots[c];if(had&&had.i!==v.i)dropDecos(set,c);set.slots[c]={i:v.i,cur:0,to:v.lv||1,path:!!v.path};}
       save();render();renderDrawer();const el=document.querySelector('#added-msg');if(el)el.textContent='Swapped into '+set.name;break;}
-    case 'cmp-browse':S.search.type=S.cmpKind==='w'?'w':'a';if(S.cmpKind!=='w')S.search.ac=S.cmpKind;S.search.q='';S.tab='search';save();render();window.scrollTo(0,0);break;
+    case 'cmp-browse':S.search.type=S.cmpKind==='w'?'w':'a';if(S.cmpKind!=='w')S.search.ac=S.cmpKind==='all'?'all':S.cmpKind;S.search.q='';S.tab='search';save();render();window.scrollTo(0,0);break;
     case 'item':openView({t:'item',i:+d.i,q:1});break;
     case 'open-w':openView({t:'w',i:+d.i});break;
     case 'open-a':{const g=Object.values(curSet().slots).find(x=>x&&x.i===+d.i&&armor[+d.i]);openView({t:'a',i:+d.i,lv:1});break;}
@@ -1259,6 +1336,9 @@ function onClick(t,act,d){
     case 'clear-bag-yes':curBag().slots=Array(BAG_SIZE).fill(null);save();render();break;
     case 'bag-remove':curBag().slots[+d.k]=null;save();render();break;
     case 'bq':{const x=curBag().slots[+d.k];if(x){const mx=items[x.i].mx||99;x.q=Math.max(1,Math.min(mx,x.q+(+d.d)));save();render();}break;}
+    case 'mv-all':set.mv={p:[],r:{}};save();render();break;
+    case 'mv-piece':{const P=set.mv.p,x=P.indexOf(d.k);if(x>=0){P.splice(x,1);delete set.mv.r[d.k];}else P.push(d.k);save();render();break;}
+    case 'mv-reset':delete set.mv.r[d.k];save();render();break;
     case 'slot-open':set.open[d.slot]=!set.open[d.slot];save();render();break;
     case 'lv':{const g=getGoal(d.scope,d.id);if(!g)break;g.to=+d.lv;if((g.cur||0)>g.to)g.cur=g.to;save();render();break;}
     case 'wmode':{const g=getGoal(d.scope,d.id);if(!g)break;g.mode=d.v;save();render();break;}
@@ -1312,7 +1392,9 @@ function onClick(t,act,d){
 }
 document.addEventListener('change',e=>{
   const t=e.target,d=t.dataset;
-  if(d.act==='cur'){const g=getGoal(d.scope,d.id);if(!g)return;g.cur=+t.value;if(g.cur>0)g.path=false;if((g.to||1)<g.cur)g.to=g.cur;if(!g.to||g.to<1)g.to=1;save();render();}
+  if(d.act==='cur'){const g=getGoal(d.scope,d.id);if(!g)return;const v=String(t.value).split(':');g.path=false;delete g.base;
+    if(v[0]==='b'){g.cur=0;g.base={i:+v[1],lv:+v[2]};}else g.cur=+v[1]||0;
+    if((g.to||1)<g.cur)g.to=g.cur;if(!g.to||g.to<1)g.to=1;save();render();}
   else if(d.act==='path'){const g=getGoal(d.scope,d.id);if(!g)return;g.path=t.checked;save();render();}
   else if(d.act==='wstart'||d.act==='wend'){
     const g=d.scope==='dv'?stack[stack.length-1]:getGoal(d.scope,d.id);if(!g)return;
@@ -1326,6 +1408,10 @@ document.addEventListener('change',e=>{
   else if(d.act==='skill-filter2'){S.search.skill2=t.value;showLimit=150;save();render();}
   else if(d.act==='dv-path'){stack[stack.length-1].path=t.checked;renderDrawer();}
   else if(d.act==='have'){setHave(+d.i,t.value);render();}
+  else if(d.act==='mv-from'||d.act==='mv-to'){const set=curSet(),V=viewSteps(set).all.find(x=>x.key===d.k);if(!V)return;const n=V.steps.length,r=set.mv.r[d.k]||[0,n-1];
+    if(d.act==='mv-from'){r[0]=+t.value;if(r[1]<r[0])r[1]=r[0];}else r[1]=Math.max(+t.value,r[0]);set.mv.r[d.k]=r;save();render();}
+  else if(d.act==='res-sort'){S.search.sort=t.value;showLimit=150;save();renderResults();}
+  else if(d.act==='mat-sort'){S.matSort=t.value;save();render();}
   else if(d.act==='only-missing'){S.onlyMissing=t.checked;save();render();}
 });
 let qTimer=0;
