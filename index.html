@@ -318,6 +318,9 @@ const SLOT_LABEL={Weapon:'Weapon',Headgear:'Head',Torso:'Torso',Arms:'Arms',Wais
 const WELEMS=['all','Fire','Water','Thunder','Ice','Dragon','Poison','Paralysis','Sleep','none'];
 const AMMO_KEY={Fire:'flame',Water:'water',Thunder:'thunder',Ice:'freeze',Dragon:'dragon',Poison:'poison',Paralysis:'para',Sleep:'sleep'};
 const isBowgun=w=>/Bowgun/.test(w.c);
+const bgClass=()=>/Bowgun/.test(S.search.wc||'');
+/* elements picked: several at once for bowgun classes, one otherwise */
+const pickedEls=()=>bgClass()?(S.search.elm||[]):(S.search.el&&S.search.el!=='all'?[S.search.el]:[]);
 /* elemental/status ammo levels a bowgun can load, '-' entries dropped */
 const ammoFor=(w,el)=>{const a=((w.s||{}).ammo||{})[AMMO_KEY[el]];return Array.isArray(a)?a.filter(x=>x!=='-'):[];};
 const hasElemAmmo=w=>Object.keys(AMMO_KEY).some(el=>ammoFor(w,el).length);
@@ -388,7 +391,7 @@ function sanitizeState(){
   if(!['1','2','3','4','5','6','7','max'].includes(S.cmpLv))S.cmpLv='max';
   if(!['sets','bags','search','compare'].includes(S.tab))S.tab='sets';
   const sr=isObj(S.search)?S.search:{};
-  S.search={type:['all','w','a','d','i'].includes(sr.type)?sr.type:'all',wc:sr.wc==='Dual Swords'?'Dual Blades':WCLASSES.includes(sr.wc)?sr.wc:'all',ac:['all',...CATS].includes(sr.ac)?sr.ac:'all',q:typeof sr.q==='string'?sr.q.slice(0,60):'',skill:typeof sr.skill==='string'&&skills[sr.skill]?sr.skill:'',skill2:typeof sr.skill2==='string'&&skills[sr.skill2]?sr.skill2:'',slots:['all','0','1','2','3'].includes(sr.slots)?sr.slots:'all',el:typeof sr.el==='string'&&WELEMS.includes(sr.el)?sr.el:'all',collapsed:isObj(sr.collapsed)?sr.collapsed:{}};
+  S.search={type:['all','w','a','d','i'].includes(sr.type)?sr.type:'all',wc:sr.wc==='Dual Swords'?'Dual Blades':WCLASSES.includes(sr.wc)?sr.wc:'all',ac:['all',...CATS].includes(sr.ac)?sr.ac:'all',q:typeof sr.q==='string'?sr.q.slice(0,60):'',skill:typeof sr.skill==='string'&&skills[sr.skill]?sr.skill:'',skill2:typeof sr.skill2==='string'&&skills[sr.skill2]?sr.skill2:'',slots:['all','0','1','2','3'].includes(sr.slots)?sr.slots:'all',el:typeof sr.el==='string'&&WELEMS.includes(sr.el)?sr.el:'all',elm:Array.isArray(sr.elm)?[...new Set(sr.elm.filter(v=>WELEMS.includes(v)&&v!=='all'))].slice(0,8):[],collapsed:isObj(sr.collapsed)?sr.collapsed:{}};
   if(!isObj(S.target))S.target=null;
   S.onlyMissing=!!S.onlyMissing;
   if(!S.sets.find(s=>s.id===S.cur))S.cur=S.sets[0].id;
@@ -556,8 +559,8 @@ function refR(r){return SRC[r[0]][r[1]].r;}
 const openAct={w:'open-w',a:'open-a',d:'open-d',i:'item'};
 const kindLine=(k,i)=>{
   if(k==='a'){const a=armor[i],n=maxSlots(a);return [SLOT_LABEL[a.c],a.hc,a.sex,'Rarity '+a.r,n?'◯'.repeat(n):'no slots'].filter(Boolean).join(' · ');}
-  if(k==='w'){const w=weapons[i],x=w.s||{},f=S.search.type==='w'&&S.search.el;let am='';
-    if(isBowgun(w)&&f&&f!=='all'&&f!=='none'){const v=ammoFor(w,f);if(v.length){const raw=((w.s||{}).ammo||{})[AMMO_KEY[f]];am=f+' ammo '+raw.map(x=>x==='-'?'–':x).join('/')+(v.every(x=>/^\(/.test(String(x)))?' (needs Shot Add skill)':'');}}
+  if(k==='w'){const w=weapons[i],x=w.s||{};let am='';
+    if(isBowgun(w)&&S.search.type==='w')am=pickedEls().filter(f=>f!=='none'&&ammoFor(w,f).length).map(f=>{const v=ammoFor(w,f),raw=((w.s||{}).ammo||{})[AMMO_KEY[f]];return f+' ammo '+raw.map(x=>x==='-'?'–':x).join('/')+(v.every(x=>/^\(/.test(String(x)))?' (needs Shot Add skill)':'');}).join(' · ');
     return [w.c,'Rarity '+w.r,x.el?x.el+' '+(x.ev||''):'',am].filter(Boolean).join(' · ');}
   if(k==='d'){const d=decos[i];return 'Decoration · '+d.sl+' slot'+(d.sl>1?'s':'');}
   return 'Item · Rarity '+items[i].r;
@@ -923,8 +926,8 @@ function renderSearch(){
   const types=[['all','All'],['w','Weapons'],['a','Armor'],['d','Decorations'],['i','Items']];
   let sub='';
   if(s.type==='w'){sub=`<div class="subtabs" role="group" aria-label="Weapon type">${[['all','All weapons'],...WCLASSES.map(c=>[c,c])].map(([v,l])=>`<button type="button" data-act="wc" data-v="${v}" aria-pressed="${s.wc===v}">${l}</button>`).join('')}</div>`;
-    const el=s.el||'all';
-    sub+=`<div class="row"><span class="small muted">Element / status</span><div class="subtabs" role="group" aria-label="Element or status">${WELEMS.map(v=>`<button type="button" data-act="wel" data-v="${v}" aria-pressed="${el===v}"${v!=='all'&&v!=='none'?` class="el-${v.toLowerCase()}"`:''}>${v==='all'?'Any':v==='none'?'No element':v}</button>`).join('')}</div></div>`;}
+    const pk=pickedEls(),multi=bgClass();
+    sub+=`<div class="row"><span class="small muted">${multi?'Ammo element / status (pick several)':'Element / status'}</span><div class="subtabs" role="group" aria-label="Element or status">${WELEMS.map(v=>`<button type="button" data-act="wel" data-v="${v}" aria-pressed="${v==='all'?!pk.length:pk.includes(v)}"${v!=='all'&&v!=='none'?` class="el-${v.toLowerCase()}"`:''}>${v==='all'?'Any':v==='none'?'No element':v}</button>`).join('')}</div>${multi&&pk.length>1&&!pk.includes('none')?'<span class="small muted">Bowguns that load all of these.</span>':''}</div>`;}
   if(s.type==='a') sub=`<div class="subtabs" role="group" aria-label="Armor part">${[['all','All armor'],...CATS.map(c=>[c,SLOT_LABEL[c]])].map(([v,l])=>`<button type="button" data-act="ac" data-v="${v}" aria-pressed="${s.ac===v}">${l}</button>`).join('')}</div>`;
   if(s.type==='a'){const sv=s.slots||'all';
     sub+=`<div class="row"><span class="small muted">Slots (at max level)</span><div class="subtabs" role="group" aria-label="Decoration slots">${[['all','Any'],['0','None'],['1','◯'],['2','◯◯'],['3','◯◯◯']].map(([v,l])=>`<button type="button" data-act="aslots" data-v="${v}" aria-pressed="${sv===v}"${v!=='all'&&v!=='0'?` aria-label="${v} slot${v==='1'?'':'s'}"`:''}>${l}</button>`).join('')}</div></div>`;}
@@ -948,13 +951,13 @@ function renderResults(){
   if(s.type==='all'&&q.length<2){box.innerHTML=`<p class="muted">Type at least 2 letters to search everything, or pick a category above to browse it. Try ${['Rathalos','Kirin','Machalite Ore','Wyvern Gem','Lao-Shan'].map(x=>`<button type="button" class="chip" data-act="quick" data-v="${x}">${x}</button>`).join(' ')}</p>`;return;}
   if(!INDEX)buildIndex();
   const terms=q.split(/\s+/).filter(Boolean);
-  const SKF=[s.skill,s.skill2].filter(Boolean);
+  const SKF=[s.skill,s.skill2].filter(Boolean),PK=pickedEls();
   const hits=INDEX.filter(e=>{
     if(s.type!=='all'&&e.k!==s.type)return false;
     if(e.k==='w'&&s.type==='w'&&s.wc!=='all'&&weapons[e.i].c!==s.wc)return false;
-    if(e.k==='w'&&s.type==='w'&&s.el&&s.el!=='all'){const w=weapons[e.i];
-      if(isBowgun(w)){if(s.el==='none'?hasElemAmmo(w):!ammoFor(w,s.el).length)return false;}
-      else{const el=(w.s||{}).el||'';if(s.el==='none'?el!=='':el!==s.el)return false;}}
+    if(e.k==='w'&&s.type==='w'&&PK.length){const w=weapons[e.i];
+      if(isBowgun(w)){if(PK[0]==='none'?hasElemAmmo(w):PK.some(v=>!ammoFor(w,v).length))return false;}
+      else{const el=(w.s||{}).el||'';if(PK[0]==='none'?el!=='':el!==PK[0])return false;}}
     if(e.k==='a'&&s.type==='a'&&s.ac!=='all'&&armor[e.i].c!==s.ac)return false;
     if(e.k==='a'&&s.type==='a'&&s.slots&&s.slots!=='all'&&maxSlots(armor[e.i])!==+s.slots)return false;
     if((s.type==='a'||s.type==='d')&&SKF.some(t=>!(skPts(e.k,e.i,t)>0)))return false;
@@ -1186,7 +1189,12 @@ function onClick(t,act,d){
     case 'inc':case 'dec':{const i=+d.i;setHave(i,have(i)+(act==='inc'?1:-1));render();break;}
     case 'stype':S.search.type=d.v;showLimit=150;save();render();break;
     case 'wc':S.search.wc=d.v;showLimit=150;save();render();break;
-    case 'wel':S.search.el=d.v;showLimit=150;save();render();break;
+    case 'wel':{const sr=S.search;
+      if(bgClass()){let m=(sr.elm||[]).filter(v=>v!=='none');
+        if(d.v==='all')m=[];else if(d.v==='none')m=sr.elm&&sr.elm[0]==='none'?[]:['none'];else m=m.includes(d.v)?m.filter(v=>v!==d.v):[...m,d.v];
+        sr.elm=m;}
+      else sr.el=d.v;
+      showLimit=150;save();render();break;}
     case 'ac':S.search.ac=d.v;showLimit=150;save();render();break;
     case 'cls':S.search.cls=d.v;showLimit=150;save();render();break;
     case 'more':showLimit+=300;renderResults();break;
