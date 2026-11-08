@@ -1141,7 +1141,7 @@ function decodeShare(code){
 }
 function sharePanel(set){
   const url=SHARE_BASE+'#set='+shareCode(set);
-  return `<div class="panel sharebox"><label class="small muted" for="share-url">Send this link to a friend. Opening it adds <b>${esc(set.name)}</b> to their sets.</label>
+  return `<div class="panel sharebox"><div class="row"><b>Share this set</b><span class="spacer"></span><button type="button" class="btn ghost sm" data-act="share-close" aria-label="Close share panel">✕ Close</button></div><label class="small muted" for="share-url">Send this link to a friend. Opening it adds <b>${esc(set.name)}</b> to their sets.</label>
     <div class="row"><input id="share-url" type="text" readonly value="${esc(url)}"><button type="button" class="btn primary sm" data-act="share-copy">Copy link</button><span id="share-msg" class="small muted"></span></div>
     <div class="small muted">Your "I have it" marks and item counts are not included.</div></div>`;
 }
@@ -1238,12 +1238,13 @@ function equipView(v){
     parts.push(`<div class="row"><span class="small muted">Level</span><div class="seg" role="group" aria-label="Level">${Array.from({length:mx},(_,x)=>x+1).map(l=>`<button type="button" data-act="dv-lv" data-lv="${l}" aria-pressed="${v.lv===l}" class="${l<v.lv?'inrange':''}">Lv${l}</button>`).join('')}</div></div>`);
     parts.push(preview('a',a));parts.push(`<div class="box"><h3>Stats</h3>${armorStats(a,v.lv)}</div>`);
     parts.push(`<div class="box"><h3>Skills</h3>${skillList(a.sk)}</div>`);
-    if(a.from!=null) parts.push(`<div class="src"><h3>Comes from</h3><div class="chain"><button type="button" data-act="open-a" data-i="${a.from}">${esc(armor[a.from].n)}</button> <span class="muted small">at Lv${a.bl||1}</span></div></div>`);
+    if(a.from!=null){const ch=armorChain(i);
+      parts.push(`<div class="src"><h3>Comes from</h3><div class="chain">${ch.map((c,j)=>j===ch.length-1?`<b>${esc(armor[c].n)}</b>`:`<button type="button" data-act="open-a" data-i="${c}">${esc(armor[c].n)}</button> <span class="muted small">at Lv${armor[ch[j+1]].bl||1}</span> <span class="muted">→</span> `).join('')}</div>${ch.length>2?`<div class="small muted">${ch.length-1} upgrades in this tree.</div>`:''}</div>`);}
     if(a.ch&&a.ch.length) parts.push(`<div class="src"><h3>Upgrades into (at Lv${a.ul})</h3><div class="chips">${a.ch.map(c=>`<button type="button" class="chip" data-act="open-a" data-i="${c}">${dot(armor[c].r)}${esc(armor[c].n)}</button>`).join('')}</div></div>`);
     const step=armorSteps(i,v.lv>1?v.lv-1:0,v.lv,false).filter(s=>s.owner===i&&s.lv===v.lv)[0];
     parts.push(`<div class="box"><div class="row"><h3>Materials · ${v.lv===1?(a.from!=null?'Upgrade to Lv1':'Forge (Lv1)'):'Lv'+(v.lv-1)+' → Lv'+v.lv}</h3><span class="spacer"></span><span class="z">${fmt(step?step.z:0)}z</span></div>${chips(step?step.mats:[])}</div>`);
     const agg=aggregate([{k:'a',i,cur:0,to:v.lv,path:!!v.path}]);
-    parts.push(`<div class="box total"><div class="row"><h3>Materials (total) · up to Lv${v.lv}</h3><span class="spacer"></span><span class="z">${fmt(agg.z)}z</span></div>${a.from!=null?`<label class="small"><input type="checkbox" id="dv-path" data-act="dv-path"${v.path?' checked':''}> Include base piece (${esc(armor[a.from].n)} to Lv${a.bl||1})</label>`:''}${chips(agg.rows.map(r=>[r.i,r.q]))}</div>`);
+    parts.push(`<div class="box total"><div class="row"><h3>Materials (total) · up to Lv${v.lv}</h3><span class="spacer"></span><span class="z">${fmt(agg.z)}z</span></div>${a.from!=null?`<label class="small"><input type="checkbox" id="dv-path" data-act="dv-path"${v.path?' checked':''}> ${armorChain(i).length>2?'Include the whole tree (from '+esc(armor[armorChain(i)[0]].n)+')':'Include base piece ('+esc(armor[a.from].n)+' to Lv'+(a.bl||1)+')'}</label>`:''}${chips(agg.rows.map(r=>[r.i,r.q]))}</div>`);
     
   }else{
     const d=decos[i];
@@ -1313,6 +1314,7 @@ function onClick(t,act,d){
     case 'newset':S.newSet=true;render();setTimeout(()=>{const x=$('#newset-name');if(x)x.focus();},0);break;
     case 'newset-cancel':S.newSet=false;render();break;
     case 'share-set':S.shareOpen=!S.shareOpen;render();if(S.shareOpen){const x=$('#share-url');if(x){x.focus();x.select();}}break;
+    case 'share-close':S.shareOpen=false;render();break;
     case 'share-copy':{const x=$('#share-url'),m=$('#share-msg');x.select();
       const done=()=>{if(m)m.textContent='Copied';},fail=()=>{try{document.execCommand('copy');done();}catch(e){if(m)m.textContent='Select the link and copy it';}};
       if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(x.value).then(done,fail);else fail();break;}
