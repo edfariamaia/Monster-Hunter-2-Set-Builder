@@ -390,7 +390,8 @@ function sanitizeState(){
     if(!isIdx(g.i,armor)||armor[g.i].c!==sl)return null;
     const mx=maxLvA(armor[g.i]);const cur=int(g.cur,0,mx,0);const to=Math.max(cur,int(g.to,1,mx,1));const o={i:g.i,cur:g.got?to:cur,to,path:false};
     if(o.cur<1){const ch=armorChain(g.i);
-      if(isObj(g.base)&&ch.indexOf(+g.base.i)>=0&&ch.indexOf(+g.base.i)<ch.length-1){const bi=+g.base.i;o.base={i:bi,lv:int(g.base.lv,0,maxLvA(armor[bi]),0)};if(o.base.lv===0&&bi!==ch[0])o.base.lv=1;}
+      if(isObj(g.base)&&ch.indexOf(+g.base.i)>=0&&ch.indexOf(+g.base.i)<ch.length-1){const bi=+g.base.i,k=ch.indexOf(bi),need=Math.min(armor[ch[k+1]].bl||1,maxLvA(armor[bi]));o.base={i:bi,lv:int(g.base.lv,0,need,0)};if(o.base.lv===0&&bi!==ch[0])o.base.lv=1;
+        if(k===ch.length-2&&o.base.lv>=need)delete o.base;}
       else if(g.path&&ch.length>1)o.base={i:ch[0],lv:0};}
     return o;
   };
@@ -732,9 +733,10 @@ function armorControls(scope,id,g){
   let opts='';
   if(ch.length>1){
     opts+=op(`b:${ch[0]}:0`,'Nothing yet (forge '+armor[ch[0]].n+')');
-    ch.slice(0,-1).forEach((c,j)=>{const nx=armor[ch[j+1]],need=nx.bl||1,m=maxLv(armor[c]);
+    /* earlier pieces only go up to the level the next upgrade needs */
+    ch.slice(0,-1).forEach((c,j)=>{const nx=armor[ch[j+1]],need=Math.min(nx.bl||1,maxLv(armor[c]));
       opts+=`<optgroup label="${esc(armor[c].n)} (Lv${need} to upgrade)">`;
-      for(let l=1;l<=m;l++)opts+=op(j===ch.length-2&&l===need?'c:0':`b:${c}:${l}`,armor[c].n+' Lv'+l+(l>=need?' ✓ ready':''));
+      for(let l=1;l<=need;l++)opts+=op(j===ch.length-2&&l===need?'c:0':`b:${c}:${l}`,armor[c].n+' Lv'+l+(l===need?' ✓ ready to upgrade':''));
       opts+='</optgroup>';});
     opts+=`<optgroup label="${esc(a.n)}">`;
   }else opts+=op('c:0','Nothing yet');
