@@ -96,6 +96,20 @@ input[type=text],input[type=search]{padding:8px 12px;border-radius:9px;border:1p
 .gotnote{margin:6px 0 0}
 .sharebox{margin:8px 0;display:grid;gap:8px}.sharebox input{flex:1;min-width:0;font:inherit;font-size:.85rem;padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink)}
 .gotopt{display:flex;align-items:center;gap:6px;width:100%;margin-bottom:2px}
+.donetag{color:var(--ok);font-weight:600}
+.xbtn{padding:2px 8px;line-height:1.2}
+.route select{max-width:100%}
+details.menu{position:relative}
+details.menu>summary{list-style:none;cursor:pointer;font-size:1.1rem;letter-spacing:1px}
+details.menu>summary::-webkit-details-marker{display:none}
+.menu-list{position:absolute;left:0;top:calc(100% + 4px);z-index:30;min-width:180px;display:grid;padding:4px;background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow)}
+.menu-list button{border:0;background:none;text-align:left;padding:8px 10px;border-radius:6px;font:inherit;color:var(--ink);cursor:pointer}
+.menu-list button:hover,.menu-list button:focus-visible{background:var(--sunk)}
+.menu-list .danger{color:var(--warn)}
+details.filters{border:1px solid var(--line);border-radius:10px;background:var(--panel)}
+details.filters>summary{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:8px 12px;cursor:pointer;font-weight:600}
+details.filters>summary .fon{font-weight:500;color:var(--accent)}
+details.filters .fbody{display:grid;gap:10px;padding:4px 12px 12px}
 .settab.new{border-style:dashed;color:var(--muted);font-weight:500}
 .newset{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 /* slot + result cards share one shape */
@@ -369,7 +383,7 @@ function sanitizeState(){
     if(sl==='Weapon'){if(!isIdx(g.i,weapons))return null;
       const o={i:g.i};if(typeof g.mode==='string')o.mode=g.mode;if(Number.isInteger(+g.end)&&isIdx(+g.end,weapons))o.end=+g.end;if(g.got)o.got=true;return o;}
     if(!isIdx(g.i,armor)||armor[g.i].c!==sl)return null;
-    const mx=maxLvA(armor[g.i]);const cur=int(g.cur,0,mx,0);const o={i:g.i,cur,to:Math.max(cur,int(g.to,1,mx,1)),path:!!g.path};if(g.got)o.got=true;return o;
+    const mx=maxLvA(armor[g.i]);const cur=int(g.cur,0,mx,0);const to=Math.max(cur,int(g.to,1,mx,1));const o={i:g.i,cur:g.got?to:cur,to,path:!!g.path&&!g.got};return o;
   };
   let sets=Array.isArray(S.sets)?S.sets.filter(isObj):[];const ids=new Set();
   sets=sets.slice(0,MAX_SETS).map((o,k)=>{let id=Number.isInteger(o.id)&&!ids.has(o.id)?o.id:null;if(id==null){id=1;while(ids.has(id))id++;}ids.add(id);
@@ -396,7 +410,7 @@ function sanitizeState(){
   if(!['1','2','3','4','5','6','7','max'].includes(S.cmpLv))S.cmpLv='max';
   if(!['sets','bags','search','compare'].includes(S.tab))S.tab='sets';
   const sr=isObj(S.search)?S.search:{};
-  S.search={type:['all','w','a','d','i'].includes(sr.type)?sr.type:'all',wc:sr.wc==='Dual Swords'?'Dual Blades':WCLASSES.includes(sr.wc)?sr.wc:'all',ac:['all',...CATS].includes(sr.ac)?sr.ac:'all',q:typeof sr.q==='string'?sr.q.slice(0,60):'',skill:typeof sr.skill==='string'&&skills[sr.skill]?sr.skill:'',skill2:typeof sr.skill2==='string'&&skills[sr.skill2]?sr.skill2:'',slots:['all','0','1','2','3'].includes(sr.slots)?sr.slots:'all',el:typeof sr.el==='string'&&WELEMS.includes(sr.el)?sr.el:'all',elm:Array.isArray(sr.elm)?[...new Set(sr.elm.filter(v=>WELEMS.includes(v)&&v!=='all'))].slice(0,8):[],collapsed:isObj(sr.collapsed)?sr.collapsed:{}};
+  S.search={type:['all','w','a','d','i'].includes(sr.type)?sr.type:'all',wc:sr.wc==='Dual Swords'?'Dual Blades':WCLASSES.includes(sr.wc)?sr.wc:'all',ac:['all',...CATS].includes(sr.ac)?sr.ac:'all',q:typeof sr.q==='string'?sr.q.slice(0,60):'',skill:typeof sr.skill==='string'&&skills[sr.skill]?sr.skill:'',skill2:typeof sr.skill2==='string'&&skills[sr.skill2]?sr.skill2:'',slots:['all','0','1','2','3'].includes(sr.slots)?sr.slots:'all',el:typeof sr.el==='string'&&WELEMS.includes(sr.el)?sr.el:'all',elm:Array.isArray(sr.elm)?[...new Set(sr.elm.filter(v=>WELEMS.includes(v)&&v!=='all'))].slice(0,8):[],collapsed:isObj(sr.collapsed)?sr.collapsed:{},fOpen:!!sr.fOpen};
   if(!isObj(S.target))S.target=null;
   S.onlyMissing=!!S.onlyMissing;
   if(!S.sets.find(s=>s.id===S.cur))S.cur=S.sets[0].id;
@@ -425,6 +439,16 @@ function weaponStarts(i){
   return o;
 }
 function normMode(i,m){if(m==='u'){const w=weapons[i];return w.from!=null?'from:'+w.from:'f';}return m||defaultWMode(i);}
+/* one forge-route control: where you start (incl. "already have it" in a set) and how far you go */
+function weaponRoute(scope,id,i,g,allowGot){
+  const o=weaponStarts(i);if(!o.length)o.push(['f','Forge '+weapons[i].n]);
+  /* owning the weapon itself sits with the other "already owned" starting points, right after its ancestors */
+  if(allowGot){const at=o.findIndex(x=>x[0]==='f');o.splice(at<0?o.length:at,0,['got',weapons[i].n+' (already owned)']);}
+  const cur=allowGot&&g.got?'got':normMode(i,g.mode);
+  if(o.length<2&&!allowGot)return '';
+  const end=cur==='got'?'':endSelect(scope,id,i,g.mode,g.end,true);
+  return `<div class="ctls route"><div class="ctl"><label for="wstart-${scope}-${id}">Start from</label><select id="wstart-${scope}-${id}" data-act="wstart" data-scope="${scope}" data-id="${id}">${o.map(([v,l])=>`<option value="${v}"${v===cur?' selected':''}>${esc(l)}</option>`).join('')}</select></div>${end}</div>`;
+}
 function startSelect(scope,id,i,mode){
   const o=weaponStarts(i);if(o.length<2)return '';
   const cur=normMode(i,mode);
@@ -444,12 +468,12 @@ function weaponSteps(i,mode,end){
     if(k===0) return x.f?{label:'Forge '+x.n,mats:x.f,z:x.p}:{label:x.n+' (base)',mats:x.u||[],z:x.p};
     return {label:'Upgrade to '+x.n,mats:x.u||[],z:x.p};});
 }
-function endSelect(scope,id,i,mode,end){
+function endSelect(scope,id,i,mode,end,inline){
   const chain=weaponChain(i);if(chain.length<2)return '';
   mode=normMode(i,mode);if(mode==='f')return '';
   let from=0;if(mode.startsWith('from:'))from=chain.indexOf(+mode.slice(5))+1;
   const opts=chain.slice(Math.max(from,0));const cur=wEnd(i,end);
-  return `<div class="ctl"><label for="wend-${scope}-${id}">Go up to</label><select id="wend-${scope}-${id}" data-act="wend" data-scope="${scope}" data-id="${id}">${opts.map(c=>`<option value="${c}"${c===cur?' selected':''}>${esc(weapons[c].n)}${c===i?' (this weapon)':''}</option>`).join('')}</select></div>`;
+  return `<div class="ctl"><label for="wend-${scope}-${id}">${inline?'→ up to':'Go up to'}</label><select id="wend-${scope}-${id}" data-act="wend" data-scope="${scope}" data-id="${id}">${opts.map(c=>`<option value="${c}"${c===cur?' selected':''}>${esc(weapons[c].n)}${c===i?' (this weapon)':''}</option>`).join('')}</select></div>`;
 }
 function armorSteps(i,cur,to,path,depth){
   const a=armor[i],st=[];depth=depth||0;
@@ -646,14 +670,15 @@ function matTable(agg,scope,onlyMissing){
 /* ---------- set page ---------- */
 function armorControls(scope,id,g){
   const a=armor[g.i],mx=maxLv(a),cur=g.cur||0,to=Math.max(g.to||1,cur);
-  let opts='<option value="0"'+(cur===0?' selected':'')+'>Not owned</option>';
-  for(let l=1;l<=mx;l++) opts+=`<option value="${l}"${cur===l?' selected':''}>Own at Lv${l}</option>`;
+  let opts='<option value="0"'+(cur===0?' selected':'')+'>Nothing yet</option>';
+  for(let l=1;l<=mx;l++) opts+=`<option value="${l}"${cur===l?' selected':''}>Lv${l}${l===mx?' (max)':''}</option>`;
   let seg='';
   for(let l=1;l<=mx;l++){const dis=l<Math.max(cur,1);seg+=`<button type="button" data-act="lv" data-scope="${scope}" data-id="${id}" data-lv="${l}" aria-pressed="${l===to}" class="${l<to&&l>=Math.max(cur,1)?'inrange':''}"${dis?' disabled':''}>Lv${l}</button>`;}
   const pathCtl=a.from!=null?`<label class="ctl small"><input type="checkbox" id="path-${scope}-${id}" data-act="path" data-scope="${scope}" data-id="${id}"${g.path?' checked':''}${cur>0?' disabled':''}> Include base piece (${esc(armor[a.from].n)} to Lv${a.bl||1})</label>`:'';
   return `<div class="ctls">
-    ${g.got?'':`<div class="ctl"><label for="cur-${scope}-${id}">Owned</label><select id="cur-${scope}-${id}" data-act="cur" data-scope="${scope}" data-id="${id}">${opts}</select></div>`}
-    <div class="ctl"><span class="lab">Target</span><div class="seg" role="group" aria-label="Target level">${seg}</div></div>
+    <div class="ctl"><label for="cur-${scope}-${id}">I have</label><select id="cur-${scope}-${id}" data-act="cur" data-scope="${scope}" data-id="${id}">${opts}</select></div>
+    <div class="ctl"><span class="lab">Goal</span><div class="seg" role="group" aria-label="Goal level">${seg}</div></div>
+    ${cur>=to?'<span class="small donetag">✓ Done: nothing left to forge</span>':''}
     ${pathCtl}</div>`;
 }
 function levelTable(scope,id,g){
@@ -672,14 +697,15 @@ function slotCard(set,sl){
   const g=set.slots[sl];
   if(!g) return `<button type="button" class="card add" data-act="goto-slot" data-slot="${sl}"><span class="plus">+</span><span class="kind">${SLOT_LABEL[sl]}</span></button>`;
   if(sl==='Weapon'){
-    const w=weapons[g.i],ms=weaponStarts(g.i).length>1?[1]:[];
-    return `<div class="panel slot${g.got?' got':''}"><div class="slot-head">${dot(w.r)}<div class="t"><button type="button" data-act="open-w" data-i="${g.i}">${esc(w.n)}</button><span class="kind">Weapon · ${esc(w.c)}${wEnd(g.i,g.end)!==g.i?' · stats for '+esc(weapons[wEnd(g.i,g.end)].n):''}</span></div>${pips(set,sl)}<button type="button" class="btn sm gotbtn" data-act="slot-got" data-slot="${sl}" aria-pressed="${!!g.got}" title="Mark that you already have this piece: its materials stop counting">${g.got?'✓ I have it':'I have it?'}</button><button type="button" class="btn ghost sm" data-act="slot-remove" data-slot="${sl}">Remove</button></div>
-      ${ms.length?`<div class="ctls">${startSelect('set','Weapon',g.i,g.mode)}${endSelect('set','Weapon',g.i,g.mode,g.end)}</div>`:''}
-      ${g.got?'<p class="small muted gotnote">You already have this weapon, so its materials are left out of the totals.</p>':chips(aggregate([Object.assign({k:'w'},g)]).rows.map(r=>[r.i,r.q]))}</div>`;
+    const w=weapons[g.i];
+    return `<div class="panel slot${g.got?' got':''}"><div class="slot-head">${dot(w.r)}<div class="t"><button type="button" data-act="open-w" data-i="${g.i}">${esc(w.n)}</button><span class="kind">Weapon · ${esc(w.c)}${wEnd(g.i,g.end)!==g.i?' · stats for '+esc(weapons[wEnd(g.i,g.end)].n):''}</span></div>${pips(set,sl)}<button type="button" class="btn ghost sm xbtn" data-act="slot-remove" data-slot="${sl}" aria-label="Remove ${esc(SLOT_LABEL[sl].toLowerCase())}" title="Remove from set">✕</button></div>
+      ${weaponRoute('set','Weapon',g.i,g,true)}
+      ${g.got?'<span class="small donetag">✓ Done: nothing left to forge</span>':chips(aggregate([Object.assign({k:'w'},g)]).rows.map(r=>[r.i,r.q]))}</div>`;
   }
   const a=armor[g.i],open=!!set.open[sl];
-  return `<div class="panel slot${g.got?' got':''}"><div class="slot-head">${dot(a.r)}<div class="t"><button type="button" data-act="open-a" data-i="${g.i}">${esc(a.n)}</button><span class="kind">${SLOT_LABEL[sl]}${a.sex?' · '+a.sex:''}</span></div>${pips(set,sl)}<button type="button" class="btn sm gotbtn" data-act="slot-got" data-slot="${sl}" aria-pressed="${!!g.got}" title="Mark that you already have this piece: its materials stop counting">${g.got?'✓ I have it':'I have it?'}</button><button type="button" class="btn ghost sm" data-act="slot-remove" data-slot="${sl}">Remove</button></div>
-    ${g.got?'<p class="small muted gotnote">You already have this piece, so its materials are left out of the totals. The target level still sets its defense and slots.</p>':''}${armorControls('set',sl,g)}
+  const done=(g.cur||0)>=(g.to||1);
+  return `<div class="panel slot${done?' got':''}"><div class="slot-head">${dot(a.r)}<div class="t"><button type="button" data-act="open-a" data-i="${g.i}">${esc(a.n)}</button><span class="kind">${SLOT_LABEL[sl]}${a.sex?' · '+a.sex:''}</span></div>${pips(set,sl)}<button type="button" class="btn ghost sm xbtn" data-act="slot-remove" data-slot="${sl}" aria-label="Remove ${esc(SLOT_LABEL[sl].toLowerCase())}" title="Remove from set">✕</button></div>
+    ${armorControls('set',sl,g)}
     <button type="button" class="ext-toggle" data-act="slot-open" data-slot="${sl}" aria-expanded="${open}">${open?'▾ Hide levels':'▸ Show levels and materials'} (max Lv${maxLv(a)})</button>${open?levelTable('set',sl,g):''}</div>`;
 }
 /* numbers behind the set stats, reused by "Try in set" */
@@ -786,7 +812,7 @@ function renderSets(){
   const agg=aggregate(setGoals(set));
   return `<section class="stack">
     <div class="setbar">${tabs}${newBtn}</div>
-    <div class="row"><h2 id="set-title">${esc(set.name)}</h2><span id="set-actions" class="row"><button type="button" class="btn ghost sm" data-act="rename">Rename</button>${S.sets.length>1?`<button type="button" class="btn ghost sm danger" data-act="del-set">Delete set</button>`:''}<button type="button" class="btn ghost sm" data-act="clear-set">Clear</button><button type="button" class="btn sm" data-act="share-set" aria-expanded="${!!S.shareOpen}">Share set</button></span></div>
+    <div class="row"><h2 id="set-title">${esc(set.name)}</h2><details id="set-actions" class="menu"><summary class="btn ghost sm" aria-label="Set options" title="Set options">⋯</summary><div class="menu-list" role="menu"><button type="button" role="menuitem" data-act="share-set">Share set</button><button type="button" role="menuitem" data-act="rename">Rename</button><button type="button" role="menuitem" data-act="clear-set">Clear all pieces</button>${S.sets.length>1?`<button type="button" role="menuitem" class="danger" data-act="del-set">Delete set</button>`:''}</div></details></div>
     ${S.shareOpen?sharePanel(set):''}
     <div class="slots">${SLOTS.map(sl=>slotCard(set,sl)).join('')}</div>
     ${decoSection}
@@ -908,7 +934,7 @@ function miniSet(){
     if(!g) return `<div class="mrow"><span class="lab">${SLOT_LABEL[p]}</span><span class="empty">empty</span><span></span></div>`;
     const isW=p==='Weapon',x=isW?weapons[wEnd(g.i,g.end)]:armor[g.i];
     const P=lay.L[p];let dc='';for(let c=0;c<P.n;c++){const v=P.cells[c];if(v===null)dc+='<span class="dchip free">◯</span>';else if(v>=0)dc+=`<span class="dchip">${esc(decos[set.decos[v].i].n)}</span>`;}
-    return `<div class="mrow"><span class="lab">${SLOT_LABEL[p]}</span><button type="button" class="nm" data-act="open-${isW?'w':'a'}" data-i="${isW?wEnd(g.i,g.end):g.i}">${dot(x.r)} ${esc(x.n)}</button><span class="lv">${g.got?'<span class="gotmark" title="You have it">✓</span> ':''}${isW?'':'Lv'+Math.max(g.to||1,g.cur||0)}</span>${dc?`<div class="mdecos">${dc}</div>`:''}</div>`;}).join('');
+    return `<div class="mrow"><span class="lab">${SLOT_LABEL[p]}</span><button type="button" class="nm" data-act="open-${isW?'w':'a'}" data-i="${isW?wEnd(g.i,g.end):g.i}">${dot(x.r)} ${esc(x.n)}</button><span class="lv">${(isW?g.got:(g.cur||0)>=(g.to||1))?'<span class="gotmark" title="You have it">✓</span> ':''}${isW?'':'Lv'+Math.max(g.to||1,g.cur||0)}</span>${dc?`<div class="mdecos">${dc}</div>`:''}</div>`;}).join('');
   const acts=Object.values(st.act);
   // decorations socketed in this set, grouped by jewel
   const byJ=new Map();lay.fit.forEach(x=>{const e=byJ.get(x.i)||{n:0,pieces:[]};e.n++;e.pieces.push(SLOT_LABEL[x.p]);byJ.set(x.i,e);});
@@ -933,23 +959,25 @@ function miniSet(){
 function renderSearch(){
   const s=S.search;
   const types=[['all','All'],['w','Weapons'],['a','Armor'],['d','Decorations'],['i','Items']];
-  let sub='';
+  let sub='',flt='',on=[];
   if(s.type==='w'){sub=`<div class="subtabs" role="group" aria-label="Weapon type">${[['all','All weapons'],...WCLASSES.map(c=>[c,c])].map(([v,l])=>`<button type="button" data-act="wc" data-v="${v}" aria-pressed="${s.wc===v}">${l}</button>`).join('')}</div>`;
     const pk=pickedEls(),multi=bgClass();
-    sub+=`<div class="row"><span class="small muted">${multi?'Ammo element / status (pick several)':'Element / status'}</span><div class="subtabs" role="group" aria-label="Element or status">${WELEMS.map(v=>`<button type="button" data-act="wel" data-v="${v}" aria-pressed="${v==='all'?!pk.length:pk.includes(v)}"${v!=='all'&&v!=='none'?` class="el-${v.toLowerCase()}"`:''}>${v==='all'?'Any':v==='none'?'No element':v}</button>`).join('')}</div>${multi&&pk.length>1&&!pk.includes('none')?'<span class="small muted">Bowguns that load all of these.</span>':''}</div>`;}
+    if(pk.length)on.push(...pk.map(v=>v==='none'?'No element':v));
+    flt+=`<div class="row"><span class="small muted">${multi?'Ammo element / status (pick several)':'Element / status'}</span><div class="subtabs" role="group" aria-label="Element or status">${WELEMS.map(v=>`<button type="button" data-act="wel" data-v="${v}" aria-pressed="${v==='all'?!pk.length:pk.includes(v)}"${v!=='all'&&v!=='none'?` class="el-${v.toLowerCase()}"`:''}>${v==='all'?'Any':v==='none'?'No element':v}</button>`).join('')}</div>${multi&&pk.length>1&&!pk.includes('none')?'<span class="small muted">Bowguns that load all of these.</span>':''}</div>`;}
   if(s.type==='a') sub=`<div class="subtabs" role="group" aria-label="Armor part">${[['all','All armor'],...CATS.map(c=>[c,SLOT_LABEL[c]])].map(([v,l])=>`<button type="button" data-act="ac" data-v="${v}" aria-pressed="${s.ac===v}">${l}</button>`).join('')}</div>`;
-  if(s.type==='a'){const sv=s.slots||'all';
-    sub+=`<div class="row"><span class="small muted">Slots (at max level)</span><div class="subtabs" role="group" aria-label="Decoration slots">${[['all','Any'],['0','None'],['1','◯'],['2','◯◯'],['3','◯◯◯']].map(([v,l])=>`<button type="button" data-act="aslots" data-v="${v}" aria-pressed="${sv===v}"${v!=='all'&&v!=='0'?` aria-label="${v} slot${v==='1'?'':'s'}"`:''}>${l}</button>`).join('')}</div></div>`;}
+  if(s.type==='a'){const sv=s.slots||'all';if(sv!=='all')on.push(sv==='0'?'No slots':sv+' slot'+(sv==='1'?'':'s'));
+    flt+=`<div class="row"><span class="small muted">Slots (at max level)</span><div class="subtabs" role="group" aria-label="Decoration slots">${[['all','Any'],['0','None'],['1','◯'],['2','◯◯'],['3','◯◯◯']].map(([v,l])=>`<button type="button" data-act="aslots" data-v="${v}" aria-pressed="${sv===v}"${v!=='all'&&v!=='0'?` aria-label="${v} slot${v==='1'?'':'s'}"`:''}>${l}</button>`).join('')}</div></div>`;}
   if(s.type==='a'||s.type==='d'){const trees=Object.keys(skills).sort();
     const sel=(id,act,val,other,ph)=>`<select id="${id}" data-act="${act}"><option value="">${ph}</option>${trees.filter(t=>t!==other).map(t=>`<option value="${esc(t)}"${val===t?' selected':''}>${esc(t)}</option>`).join('')}</select>`;
-    const both=[s.skill,s.skill2].filter(Boolean);
-    sub+=`<div class="row"><label class="small muted" for="skill-filter">Skills</label>${sel('skill-filter','skill-filter',s.skill,s.skill2,'Any skill')}${s.skill||s.skill2?`<span class="small muted">+</span>${sel('skill-filter2','skill-filter2',s.skill2,s.skill,'Second skill (optional)')}`:''}${both.length?`<button type="button" class="btn ghost sm" data-act="skill-clear">Clear</button><span class="small muted">Pieces with positive ${both.map(esc).join(' and ')} points, best first.</span>`:''}</div>`;}
+    const both=[s.skill,s.skill2].filter(Boolean);on.push(...both);
+    flt+=`<div class="row"><label class="small muted" for="skill-filter">Skills</label>${sel('skill-filter','skill-filter',s.skill,s.skill2,'Any skill')}${s.skill||s.skill2?`<span class="small muted">+</span>${sel('skill-filter2','skill-filter2',s.skill2,s.skill,'Second skill (optional)')}`:''}${both.length?`<button type="button" class="btn ghost sm" data-act="skill-clear">Clear</button><span class="small muted">Pieces with positive ${both.map(esc).join(' and ')} points, best first.</span>`:''}</div>`;}
   const T=S.target;const tgt=T&&(T.kind==='bag'?S.bags.find(x=>x.id===T.bag):S.sets.find(x=>x.id===T.set));
   return `<div class="searchlayout">${miniSet()}<section class="stack">
     ${tgt?`<div class="note row">Choosing <b>${esc(T.label)}</b> for <b>${esc(tgt.name)}</b>. Open an entry and use <b>◂ Add to ${T.kind==='bag'?'bag':'set'}</b>.<span class="spacer"></span><button type="button" class="btn ghost sm" data-act="target-clear">Dismiss</button></div>`:''}
     <div class="searchbar"><input id="q" type="search" placeholder="${s.type==='all'?'Search everything: Rathalos, Kirin, Machalite…':'Filter by name (English or Japanese)'}" value="${esc(s.q)}" autocomplete="off" aria-label="Search">
     <div class="seg text" role="group" aria-label="Type">${types.map(([v,l])=>`<button type="button" data-act="stype" data-v="${v}" aria-pressed="${s.type===v}">${l}</button>`).join('')}</div></div>
     ${sub}
+    ${flt?`<details id="filters" class="filters"${S.search.fOpen?' open':''}><summary><span>Filters</span>${on.length?`<span class="fon">${on.map(esc).join(' · ')}</span><button type="button" class="btn ghost sm" data-act="filters-clear">Clear filters</button>`:'<span class="small muted">element, slots, skills</span>'}</summary><div class="fbody">${flt}</div></details>`:''}
     <div id="results"></div></section></div>`;
 }
 let showLimit=150;
@@ -1058,7 +1086,7 @@ function addToSet(v){
   const mark=id=>T&&(isBag?(T.kind==='bag'&&T.bag===id):(T.kind!=='bag'&&T.set===id));
   const opts=list.map(s=>`<button type="button" class="btn sm" data-act="add-to" data-id="${s.id}">${esc(s.name)}${mark(s.id)?' ★':''}</button>`).join('');
   const dis=isBag&&!(items[v.i].mx>0);
-  const gotOpt=(v.t==='w'||v.t==='a')?`<label class="small gotopt"><input type="checkbox" data-act="add-got"${v.addGot?' checked':''}> I already have it</label>`:'';
+  const gotOpt=v.t==='a'?`<label class="small gotopt"><input type="checkbox" data-act="add-got"${v.addGot?' checked':''}> I already have it</label>`:'';
   return `<div class="addset"><button type="button" class="btn primary" data-act="addset-toggle" aria-expanded="${!!v.addOpen}"${dis?' disabled title="This item cannot be carried"':''}>${v.addOpen?'▾':'◂'} Add to ${isBag?'bag':'set'}</button>${v.addOpen?`<div class="opts">${gotOpt}${opts}</div>`:''}<span id="added-msg" class="small muted"></span></div>`;
 }
 function craftsWith(i){
@@ -1074,7 +1102,9 @@ function linesGroup(title,rows,open){
   const id='lz'+(++lazyId);LAZY.set(id,rows);
   return `<details class="grp" data-lazy="${id}"><summary>${title}<span class="cnt">${rows.length}</span></summary><div class="lines"></div></details>`;
 }
-document.addEventListener('toggle',e=>{const dt=e.target;if(!dt||!dt.open||!dt.dataset||!dt.dataset.lazy)return;
+document.addEventListener('toggle',e=>{const dt=e.target;if(dt&&dt.id==='filters'){S.search.fOpen=dt.open;save();return;}
+  if(dt&&dt.id==='set-actions'&&dt.open){const close=ev=>{if(!dt.contains(ev.target)){dt.open=false;document.removeEventListener('click',close,true);}};setTimeout(()=>document.addEventListener('click',close,true));}
+  if(!dt||!dt.open||!dt.dataset||!dt.dataset.lazy)return;
   const rows=LAZY.get(dt.dataset.lazy);if(rows){dt.querySelector('.lines').innerHTML=rows.join('');LAZY.delete(dt.dataset.lazy);}delete dt.dataset.lazy;},true);
 function pctHTML(s){const [a,b,c]=(String(s).match(/n\/a|[^/]+/g)||[]);const f=x=>x==null||x==='n/a'?'—':x;return `<span class="pct"><span class="w">${f(a)}</span> · <span class="c">${f(b)}</span> · <span class="b">${f(c)}</span></span>`;}
 const hubName=s=>s.replace('Village','Village (Jumbo)').replace('Town','Town (Dundorma)');
@@ -1119,8 +1149,8 @@ function equipView(v){
     if(kids.length) parts.push(`<div class="src"><h3>Upgrades into</h3><div class="chips">${kids.map(c=>`<button type="button" class="chip" data-act="open-w" data-i="${c}">${dot(weapons[c].r)}${esc(weapons[c].n)}</button>`).join('')}</div></div>`);
     if(w.f) parts.push(`<div class="box"><div class="row"><h3>Materials · Forge</h3><span class="spacer"></span><span class="z">${fmt(w.p)}z</span></div>${chips(w.f)}</div>`);
     if(w.u&&w.from!=null) parts.push(`<div class="box"><div class="row"><h3>Materials · Upgrade from ${esc(weapons[w.from].n)}</h3><span class="spacer"></span><span class="z">${fmt(w.p)}z</span></div>${chips(w.u)}</div>`);
-    if(chain.length>1){if(!v.mode)v.mode='path';const st=weaponSteps(i,v.mode,v.end),agg=aggregate([{k:'w',i,mode:v.mode,end:v.end}]);
-      parts.push(`<div class="box total"><div class="row"><h3>Materials (total)</h3><span class="spacer"></span><span class="z">${fmt(agg.z)}z</span></div><div class="ctls">${startSelect('dv',0,i,v.mode)}${endSelect('dv',0,i,v.mode,v.end)}</div><div class="small muted">${st.length?st.length+' step'+(st.length===1?'':'s')+': '+st.map(x=>esc(x.label)).join(' · '):'Nothing to do: you already have it.'}</div>${chips(agg.rows.map(r=>[r.i,r.q]))}</div>`);}
+    if(chain.length>1){if(!v.mode)v.mode='path';const st=v.got?[]:weaponSteps(i,v.mode,v.end),agg=aggregate([{k:'w',i,mode:v.mode,end:v.end,got:v.got}]);
+      parts.push(`<div class="box total"><div class="row"><h3>Materials (total)</h3><span class="spacer"></span><span class="z">${fmt(agg.z)}z</span></div>${weaponRoute('dv',0,i,v,true)}<div class="small muted">${st.length?st.length+' step'+(st.length===1?'':'s')+': '+st.map(x=>esc(x.label)).join(' · '):'Nothing to do: you already have it.'}</div>${chips(agg.rows.map(r=>[r.i,r.q]))}</div>`);}
     
   }else if(k==='a'){
     const a=armor[i],mx=maxLv(a);if(!v.lv)v.lv=1;
@@ -1217,7 +1247,6 @@ function onClick(t,act,d){
     case 'goto-deco':gotoSearch('d',null,'a decoration for '+SLOT_LABEL[d.piece]+' slot '+(+d.pos+1),{kind:'deco',set:S.cur,piece:d.piece,pos:+d.pos});break;
     case 'goto-bag':gotoSearch('i',null,'an item for space '+(+d.pos+1),{kind:'bag',bag:S.curBag,pos:+d.pos});break;
     case 'target-clear':S.target=null;save();render();break;
-    case 'slot-got':{const g=set.slots[d.slot];if(g){if(g.got)delete g.got;else g.got=true;save();render();}break;}
     case 'slot-remove':set.slots[d.slot]=null;dropDecos(set,d.slot);save();render();break;
     case 'deco-remove':set.decos.splice(+d.k,1);save();render();break;
     case 'bag-pick':S.curBag=+d.id;save();render();break;
@@ -1246,6 +1275,7 @@ function onClick(t,act,d){
     case 'cls':S.search.cls=d.v;showLimit=150;save();render();break;
     case 'more':showLimit+=300;renderResults();break;
     case 'skill-clear':S.search.skill='';S.search.skill2='';save();render();break;
+    case 'filters-clear':{const sr=S.search;sr.el='all';sr.elm=[];sr.slots='all';sr.skill='';sr.skill2='';showLimit=150;save();render();break;}
     case 'aslots':S.search.slots=d.v;showLimit=150;save();render();break;
     case 'wgroup':{if(!S.search.collapsed)S.search.collapsed={};const k=d.g;if(S.search.collapsed[k])delete S.search.collapsed[k];else S.search.collapsed[k]=1;save();renderResults();break;}
     case 'wgroup-all':{if(!S.search.collapsed)S.search.collapsed={};if(d.v==='1'){document.querySelectorAll('[data-act="wgroup"]').forEach(b=>S.search.collapsed[b.dataset.g]=1);}else S.search.collapsed={};save();renderResults();break;}
@@ -1267,8 +1297,8 @@ function onClick(t,act,d){
       }else{
         const target=S.sets.find(s=>s.id===+d.id);if(!target)break;
         fromTarget=!!(T&&T.kind!=='bag'&&T.set===target.id);
-        if(v.t==='w'){const had=target.slots.Weapon;if(had&&had.i!==v.i)dropDecos(target,'Weapon');target.slots.Weapon={i:v.i,mode:v.mode&&weaponChain(v.i).length>1?v.mode:defaultWMode(v.i),end:v.end!=null?+v.end:undefined};if(v.addGot)target.slots.Weapon.got=true;msg=(had?'Replaced the weapon in ':'Added to ')+target.name+(v.addGot?' as owned':'');}
-        else if(v.t==='a'){const c=armor[v.i].c;const had=target.slots[c];if(had&&had.i!==v.i)dropDecos(target,c);target.slots[c]={i:v.i,cur:0,to:v.lv||1,path:!!v.path};if(v.addGot)target.slots[c].got=true;msg=(had?'Replaced '+SLOT_LABEL[c].toLowerCase()+' in ':'Added to ')+target.name+(v.addGot?' as owned':'');}
+        if(v.t==='w'){const had=target.slots.Weapon;if(had&&had.i!==v.i)dropDecos(target,'Weapon');target.slots.Weapon={i:v.i,mode:v.mode&&weaponChain(v.i).length>1?v.mode:defaultWMode(v.i),end:v.end!=null?+v.end:undefined};if(v.got)target.slots.Weapon.got=true;msg=(had?'Replaced the weapon in ':'Added to ')+target.name+(v.got?' as owned':'');}
+        else if(v.t==='a'){const c=armor[v.i].c;const had=target.slots[c];if(had&&had.i!==v.i)dropDecos(target,c);target.slots[c]={i:v.i,cur:v.addGot?(v.lv||1):0,to:v.lv||1,path:!v.addGot&&!!v.path};msg=(had?'Replaced '+SLOT_LABEL[c].toLowerCase()+' in ':'Added to ')+target.name+(v.addGot?' as owned':'');}
         else{const useT=fromTarget&&T.kind==='deco';const pc=placeDeco(target,v.i,useT?T.piece:null,useT?T.pos:null);
           if(!pc){ok=false;msg=useT?`Not enough free slots in ${SLOT_LABEL[T.piece]} for a ${decos[v.i].sl}-slot jewel`:`No free ${decos[v.i].sl}-slot space in ${target.name}`;}
           else msg='Socketed into '+SLOT_LABEL[pc]+' in '+target.name;}
@@ -1286,7 +1316,8 @@ document.addEventListener('change',e=>{
   else if(d.act==='path'){const g=getGoal(d.scope,d.id);if(!g)return;g.path=t.checked;save();render();}
   else if(d.act==='wstart'||d.act==='wend'){
     const g=d.scope==='dv'?stack[stack.length-1]:getGoal(d.scope,d.id);if(!g)return;
-    if(d.act==='wstart'){g.mode=t.value;const ch=weaponChain(g.i);if(g.end!=null&&g.mode.startsWith('from:')&&ch.indexOf(+g.end)<=ch.indexOf(+g.mode.slice(5)))delete g.end;if(g.mode==='f')delete g.end;}
+    if(d.act==='wstart'&&t.value==='got'){g.got=true;}
+    else if(d.act==='wstart'){delete g.got;g.mode=t.value;const ch=weaponChain(g.i);if(g.end!=null&&g.mode.startsWith('from:')&&ch.indexOf(+g.end)<=ch.indexOf(+g.mode.slice(5)))delete g.end;if(g.mode==='f')delete g.end;}
     else g.end=+t.value===g.i?undefined:+t.value;
     if(d.scope==='dv')renderDrawer();else{save();render();}}
   else if(d.act==='sm-set'){S.cur=+t.value;save();render();renderDrawer();}
