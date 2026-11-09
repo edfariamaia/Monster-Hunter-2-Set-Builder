@@ -425,7 +425,7 @@ function sanitizeState(){
   if(!['1','2','3','4','5','6','7','max'].includes(S.cmpLv))S.cmpLv='max';
   if(!['sets','bags','search','compare'].includes(S.tab))S.tab='sets';
   const sr=isObj(S.search)?S.search:{};
-  S.search={type:['all','w','a','d','i'].includes(sr.type)?sr.type:'all',wc:sr.wc==='Dual Swords'?'Dual Blades':WCLASSES.includes(sr.wc)?sr.wc:'all',ac:['all',...CATS].includes(sr.ac)?sr.ac:'all',q:typeof sr.q==='string'?sr.q.slice(0,60):'',skill:typeof sr.skill==='string'&&skills[sr.skill]?sr.skill:'',skill2:typeof sr.skill2==='string'&&skills[sr.skill2]?sr.skill2:'',slots:['all','0','1','2','3'].includes(sr.slots)?sr.slots:'all',el:typeof sr.el==='string'&&WELEMS.includes(sr.el)?sr.el:'all',elm:Array.isArray(sr.elm)?[...new Set(sr.elm.filter(v=>WELEMS.includes(v)&&v!=='all'))].slice(0,8):[],collapsed:isObj(sr.collapsed)?sr.collapsed:{},fOpen:!!sr.fOpen,ammo:SHOT_TYPES.some(x=>x[0]===sr.ammo)?sr.ammo:'',ammoLv:['all','1','2','3'].includes(sr.ammoLv)?sr.ammoLv:'all',ammoSkill:!!sr.ammoSkill,sort:RES_SORTS.some(x=>x[0]===sr.sort)?sr.sort:'default'};
+  S.search={type:['all','w','a','d','i'].includes(sr.type)?sr.type:'all',wc:sr.wc==='Dual Swords'?'Dual Blades':WCLASSES.includes(sr.wc)?sr.wc:'all',ac:['all',...CATS].includes(sr.ac)?sr.ac:'all',q:typeof sr.q==='string'?sr.q.slice(0,60):'',skill:typeof sr.skill==='string'&&skills[sr.skill]?sr.skill:'',skill2:typeof sr.skill2==='string'&&skills[sr.skill2]?sr.skill2:'',slots:['all','0','1','2','3'].includes(sr.slots)?sr.slots:'all',el:typeof sr.el==='string'&&WELEMS.includes(sr.el)?sr.el:'all',elm:Array.isArray(sr.elm)?[...new Set(sr.elm.filter(v=>WELEMS.includes(v)&&v!=='all'))].slice(0,8):[],collapsed:isObj(sr.collapsed)?sr.collapsed:{},fOpen:!!sr.fOpen,ammo:SHOT_TYPES.some(x=>x[0]===sr.ammo)?sr.ammo:'',ammoLv:['all','1','2','3'].includes(sr.ammoLv)?sr.ammoLv:'all',ammoSkill:!!sr.ammoSkill,hc:['all','Blademaster','Gunner'].includes(sr.hc)?sr.hc:'all',sort:RES_SORTS.some(x=>x[0]===sr.sort)?sr.sort:'default'};
   if(!isObj(S.target))S.target=null;
   S.onlyMissing=!!S.onlyMissing;
   if(!MAT_SORTS.some(x=>x[0]===S.matSort))S.matSort='need-desc';
@@ -1048,6 +1048,8 @@ function renderSearch(){
       flt+=`<div class="row"><label class="small muted" for="ammo-type">Ammo type</label><select id="ammo-type" data-act="ammo-type"><option value="">Any</option>${SHOT_TYPES.map(([v,l])=>`<option value="${v}"${am===v?' selected':''}>${l}</option>`).join('')}</select>${am&&levels>1?`<div class="subtabs" role="group" aria-label="Ammo level">${[['all','Any level'],...Array.from({length:levels},(_,j)=>[String(j+1),'Lv'+(j+1)])].map(([v,l])=>`<button type="button" data-act="ammo-lv" data-v="${v}" aria-pressed="${(s.ammoLv||'all')===v}">${l}</button>`).join('')}</div>`:''}${am?`<label class="small"><input type="checkbox" data-act="ammo-skill"${s.ammoSkill?' checked':''}> Count ammo that needs a skill, shown as (n)</label><span class="small muted">Most rounds first.</span>`:''}</div>`;}
     flt+=`<div class="row"><span class="small muted">${multi?'Ammo element / status (pick several)':'Element / status'}</span><div class="subtabs" role="group" aria-label="Element or status">${WELEMS.map(v=>`<button type="button" data-act="wel" data-v="${v}" aria-pressed="${v==='all'?!pk.length:pk.includes(v)}"${v!=='all'&&v!=='none'?` class="el-${v.toLowerCase()}"`:''}>${v==='all'?'Any':v==='none'?'No element':v}</button>`).join('')}</div>${multi&&pk.length>1&&!pk.includes('none')?'<span class="small muted">Bowguns that load all of these.</span>':''}</div>`;}
   if(s.type==='a') sub=`<div class="subtabs" role="group" aria-label="Armor part">${[['all','All armor'],...CATS.map(c=>[c,SLOT_LABEL[c]])].map(([v,l])=>`<button type="button" data-act="ac" data-v="${v}" aria-pressed="${s.ac===v}">${l}</button>`).join('')}</div>`;
+  if(s.type==='a'){const hv=s.hc||'all';if(hv!=='all')on.push(hv);
+    flt+=`<div class="row"><span class="small muted">Hunter type</span><div class="subtabs" role="group" aria-label="Hunter type">${[['all','Any'],['Blademaster','Blademaster'],['Gunner','Gunner']].map(([v,l])=>`<button type="button" data-act="ahc" data-v="${v}" aria-pressed="${hv===v}">${l}</button>`).join('')}</div>${hv!=='all'?`<span class="small muted">Includes pieces both can wear.</span>`:''}</div>`;}
   if(s.type==='a'){const sv=s.slots||'all';if(sv!=='all')on.push(sv==='0'?'No slots':sv+' slot'+(sv==='1'?'':'s'));
     flt+=`<div class="row"><span class="small muted">Slots (at max level)</span><div class="subtabs" role="group" aria-label="Decoration slots">${[['all','Any'],['0','None'],['1','◯'],['2','◯◯'],['3','◯◯◯']].map(([v,l])=>`<button type="button" data-act="aslots" data-v="${v}" aria-pressed="${sv===v}"${v!=='all'&&v!=='0'?` aria-label="${v} slot${v==='1'?'':'s'}"`:''}>${l}</button>`).join('')}</div></div>`;}
   if(s.type==='a'||s.type==='d'){const trees=Object.keys(skills).sort();
@@ -1060,7 +1062,7 @@ function renderSearch(){
     <div class="searchbar"><input id="q" type="search" placeholder="${s.type==='all'?'Search everything: Rathalos, Kirin, Machalite…':'Filter by name (English or Japanese)'}" value="${esc(s.q)}" autocomplete="off" aria-label="Search">
     <div class="seg text" role="group" aria-label="Type">${types.map(([v,l])=>`<button type="button" data-act="stype" data-v="${v}" aria-pressed="${s.type===v}">${l}</button>`).join('')}</div></div>
     ${sub}
-    ${flt?`<details id="filters" class="filters"${S.search.fOpen?' open':''}><summary><span>Filters</span>${on.length?`<span class="fon">${on.map(esc).join(' · ')}</span><button type="button" class="btn ghost sm" data-act="filters-clear">Clear filters</button>`:'<span class="small muted">element, slots, skills</span>'}</summary><div class="fbody">${flt}</div></details>`:''}
+    ${flt?`<details id="filters" class="filters"${S.search.fOpen?' open':''}><summary><span>Filters</span>${on.length?`<span class="fon">${on.map(esc).join(' · ')}</span><button type="button" class="btn ghost sm" data-act="filters-clear">Clear filters</button>`:`<span class="small muted">${s.type==='a'?'hunter type, slots, skills':s.type==='w'?'element'+(bgClass()?', ammo':''):'skills'}</span>`}</summary><div class="fbody">${flt}</div></details>`:''}
     <div id="results"></div></section></div>`;
 }
 let showLimit=150;
@@ -1080,6 +1082,7 @@ function renderResults(){
       else{const el=(w.s||{}).el||'';if(PK[0]==='none'?el!=='':el!==PK[0])return false;}}
     if(e.k==='w'&&s.type==='w'&&s.ammo&&bgClass()&&(!isBowgun(weapons[e.i])||shotMatch(weapons[e.i],s)<0))return false;
     if(e.k==='a'&&s.type==='a'&&s.ac!=='all'&&armor[e.i].c!==s.ac)return false;
+    if(e.k==='a'&&s.type==='a'&&s.hc&&s.hc!=='all'&&armor[e.i].hc&&armor[e.i].hc!==s.hc)return false;
     if(e.k==='a'&&s.type==='a'&&s.slots&&s.slots!=='all'&&maxSlots(armor[e.i])!==+s.slots)return false;
     if((s.type==='a'||s.type==='d')&&SKF.some(t=>!(skPts(e.k,e.i,t)>0)))return false;
     return terms.every(t=>e.key.includes(t));});
@@ -1369,7 +1372,8 @@ function onClick(t,act,d){
     case 'cls':S.search.cls=d.v;showLimit=150;save();render();break;
     case 'more':showLimit+=300;renderResults();break;
     case 'skill-clear':S.search.skill='';S.search.skill2='';save();render();break;
-    case 'filters-clear':{const sr=S.search;sr.el='all';sr.elm=[];sr.slots='all';sr.ammo='';sr.ammoLv='all';sr.skill='';sr.skill2='';showLimit=150;save();render();break;}
+    case 'filters-clear':{const sr=S.search;sr.el='all';sr.elm=[];sr.slots='all';sr.ammo='';sr.ammoLv='all';sr.hc='all';sr.skill='';sr.skill2='';showLimit=150;save();render();break;}
+    case 'ahc':S.search.hc=d.v;showLimit=150;save();render();break;
     case 'ammo-lv':S.search.ammoLv=d.v;showLimit=150;save();render();break;
     case 'aslots':S.search.slots=d.v;showLimit=150;save();render();break;
     case 'wgroup':{if(!S.search.collapsed)S.search.collapsed={};const k=d.g;if(S.search.collapsed[k])delete S.search.collapsed[k];else S.search.collapsed[k]=1;save();renderResults();break;}
